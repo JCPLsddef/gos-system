@@ -5,11 +5,23 @@ import { createClient } from '@supabase/supabase-js';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+export const preferredRegion = 'auto';
 
 function getSupabaseClient() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
+
+export async function GET() {
+  return NextResponse.json(
+    { ok: true, message: 'API command route reachable' },
+    {
+      headers: {
+        'Allow': 'GET, POST'
+      }
+    }
   );
 }
 
@@ -24,7 +36,16 @@ export async function POST(request: Request) {
     }
 
     // Parse body
-    const body = await request.json();
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        { error: 'Invalid JSON body' },
+        { status: 400 }
+      );
+    }
+
     const { message, conversationId } = body;
 
     if (!message) {
