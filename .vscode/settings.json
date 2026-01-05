@@ -1,0 +1,8 @@
+{
+  "liveServer.settings.ignoreFiles": [
+    "**"
+  ],
+  "recommendations": [
+    "Use 'npm run dev' instead of Live Server for Next.js"
+  ]
+}
