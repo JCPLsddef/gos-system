@@ -43,13 +43,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
+    console.log('🔐 Attempting login for:', email);
+    
+    const { error, data } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
+    console.log('📊 Login response:', { 
+      hasError: !!error, 
+      errorMessage: error?.message,
+      hasSession: !!data?.session,
+      hasUser: !!data?.user,
+      userId: data?.user?.id 
+    });
+
     if (!error) {
+      console.log('✅ Login successful! Redirecting to dashboard...');
+      
+      // Wait a bit for cookies to be set
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
       router.push('/dashboard');
+    } else {
+      console.error('❌ Login failed:', error.message);
     }
 
     return { error };
