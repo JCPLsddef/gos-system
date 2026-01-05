@@ -4,10 +4,32 @@ import { authenticateRequest } from '@/lib/api-auth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+export const preferredRegion = 'auto';
+
+export async function GET() {
+  return NextResponse.json(
+    { ok: true, message: 'API actions route reachable' },
+    {
+      headers: {
+        'Allow': 'GET, POST'
+      }
+    }
+  );
+}
 
 export async function POST(request: NextRequest) {
   try {
-    const { action, data, userId: bodyUserId } = await request.json();
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        { ok: false, error: 'Invalid JSON body' },
+        { status: 400 }
+      );
+    }
+
+    const { action, data, userId: bodyUserId } = body;
 
     if (!bodyUserId) {
       return NextResponse.json({
