@@ -58,15 +58,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       userId: data?.user?.id 
     });
 
-    if (!error) {
+    if (!error && data?.session) {
       console.log('✅ Login successful! Redirecting to dashboard...');
       
-      // Wait a bit for cookies to be set
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      router.push('/dashboard');
+      // Force a hard navigation to ensure cookies are sent
+      window.location.href = '/dashboard';
     } else {
-      console.error('❌ Login failed:', error.message);
+      console.error('❌ Login failed:', error?.message || 'No session created');
     }
 
     return { error };
