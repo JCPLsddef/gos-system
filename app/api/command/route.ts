@@ -173,11 +173,50 @@ export async function POST(request: Request) {
 
 // Database operations
 async function createMission(supabase: any, userId: string, params: any) {
+  // Get or create a default battlefront for the user
+  let battlefrontId = params.battlefrontId;
+
+  if (!battlefrontId) {
+    // Try to find existing "General" or "Inbox" battlefront
+    const { data: existingBattlefronts } = await supabase
+      .from('battlefronts')
+      .select('id')
+      .eq('user_id', userId)
+      .or('name.eq.General,name.eq.Inbox')
+      .limit(1)
+      .maybeSingle();
+
+    if (existingBattlefronts) {
+      battlefrontId = existingBattlefronts.id;
+    } else {
+      // Create a default "General" battlefront
+      const { data: newBattlefront, error: battlefrontError } = await supabase
+        .from('battlefronts')
+        .insert({
+          user_id: userId,
+          name: 'General',
+          status: 'ACTIVE'
+        })
+        .select('id')
+        .single();
+
+      if (battlefrontError) throw new Error(`Failed to create default battlefront: ${battlefrontError.message}`);
+      battlefrontId = newBattlefront.id;
+    }
+  }
+
+  // Calculate due date (default to tomorrow at 5pm EST)
+  const dueDate = params.dueDate || new Date(Date.now() + 24 * 60 * 60 * 1000);
+
   const { data, error } = await supabase
     .from('missions')
     .insert({
       user_id: userId,
+      battlefront_id: battlefrontId,
       title: params.title,
+      due_date: dueDate,
+      attack_date: params.attackDate || dueDate,
+      duration_minutes: params.durationMinutes || 60,
       status: 'NOT_DONE'
     })
     .select()
