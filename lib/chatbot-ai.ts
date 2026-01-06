@@ -58,7 +58,26 @@ export async function chatAIResponse(
   const messages = [
     {
       role: "system",
-      content: SYSTEM_PROMPT + "\n\nIMPORTANT: When users ask you to perform actions, respond with special markers:\n- To create a mission, start response with [CREATE_MISSION:title]\n- To create a battlefront, use [CREATE_BATTLEFRONT:name]\n- To list missions, use [LIST_MISSIONS]\n- To list battlefronts, use [LIST_BATTLEFRONTS]\n- To list calendar, use [LIST_CALENDAR:range]\nOtherwise, just respond naturally as GOS Commander."
+      content: SYSTEM_PROMPT + `\n\nCRITICAL INSTRUCTIONS - You MUST follow this format exactly:
+
+When users ask you to perform actions, you MUST start your response with ONE of these markers:
+
+1. Create a mission: [CREATE_MISSION:exact title here]
+   Example: User says "create mission buy groceries"
+   You respond: "[CREATE_MISSION:buy groceries] I'll create that mission for you!"
+
+2. Create battlefront: [CREATE_BATTLEFRONT:exact name]
+   Example: [CREATE_BATTLEFRONT:Work Projects] Creating that battlefront!
+
+3. List missions: [LIST_MISSIONS]
+4. List battlefronts: [LIST_BATTLEFRONTS]
+5. List calendar: [LIST_CALENDAR:today] or [LIST_CALENDAR:week]
+6. Update mission date: [UPDATE_MISSION_DATE:mission_id:new_date]
+   Example: [UPDATE_MISSION_DATE:123:2026-01-10] Updating the mission date!
+
+The text inside the brackets is CRITICAL - it will be used as the actual title/name.
+Always extract the exact title/name from user's message.
+Otherwise, respond naturally without markers.`
     },
     ...previousMessages.slice(-10).map((msg) => ({
       role: msg.role === "user" ? "user" : "assistant",
@@ -100,6 +119,7 @@ export async function chatAIResponse(
     const listMissionsMatch = text.match(/\[LIST_MISSIONS\]/);
     const listBattlefrontsMatch = text.match(/\[LIST_BATTLEFRONTS\]/);
     const listCalendarMatch = text.match(/\[LIST_CALENDAR:(.+?)\]/);
+    const updateMissionDateMatch = text.match(/\[UPDATE_MISSION_DATE:(.+?):(.+?)\]/);
 
     if (createMissionMatch) {
       return {
@@ -117,6 +137,19 @@ export async function chatAIResponse(
         functionCall: {
           name: "create_battlefront",
           arguments: { name: createBattlefrontMatch[1].trim() },
+        },
+      };
+    }
+
+    if (updateMissionDateMatch) {
+      return {
+        message: text.replace(/\[UPDATE_MISSION_DATE:.+?\]/, "").trim(),
+        functionCall: {
+          name: "update_mission_date",
+          arguments: {
+            missionId: updateMissionDateMatch[1].trim(),
+            newDate: updateMissionDateMatch[2].trim()
+          },
         },
       };
     }

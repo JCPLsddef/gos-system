@@ -139,6 +139,12 @@ export async function POST(request: Request) {
             data = events;
             break;
 
+          case 'update_mission_date':
+            const updateResult = await updateMissionDate(supabase, userId, args.missionId, args.newDate);
+            response = `✓ Mission date updated to ${formatDateInEST(new Date(args.newDate))}`;
+            data = updateResult;
+            break;
+
           default:
             response = aiResponse.message || "I understood your request but couldn't execute it.";
         }
@@ -207,6 +213,7 @@ async function createMission(supabase: any, userId: string, params: any) {
 
   // Calculate due date (default to tomorrow at 5pm EST)
   const dueDate = params.dueDate || new Date(Date.now() + 24 * 60 * 60 * 1000);
+  const durationMinutes = params.durationMinutes || 60;
 
   const { data, error } = await supabase
     .from('missions')
@@ -216,13 +223,29 @@ async function createMission(supabase: any, userId: string, params: any) {
       title: params.title,
       due_date: dueDate,
       attack_date: params.attackDate || dueDate,
-      duration_minutes: params.durationMinutes || 60,
+      duration_minutes: durationMinutes,
       status: 'NOT_DONE'
     })
     .select()
     .single();
 
   if (error) throw new Error(error.message);
+
+  // Automatically create a calendar event for this mission
+  const startTime = new Date(dueDate);
+  const endTime = new Date(startTime.getTime() + durationMinutes * 60 * 1000);
+
+  await supabase
+    .from('calendar_events')
+    .insert({
+      user_id: userId,
+      title: params.title,
+      start_time: startTime.toISOString(),
+      end_time: endTime.toISOString(),
+      description: `Mission: ${params.title}`,
+      mission_id: data.id
+    });
+
   return data;
 }
 
@@ -276,6 +299,33 @@ async function listCalendarEvents(supabase: any, userId: string, range: 'today' 
 
   if (error) throw new Error(error.message);
   return data || [];
+}
+
+async function updateMissionDate(supabase: any, userId: string, missionId: string, newDate: string) {
+  const { data, error } = await supabase
+    .from('missions')
+    .update({
+      due_date: newDate,
+      attack_date: newDate
+    })
+    .eq('id', missionId)
+    .eq('user_id', userId)
+    .select()
+    .single();
+
+  if (error) throw new Error(error.message);
+
+  // Update associated calendar event if exists
+  await supabase
+    .from('calendar_events')
+    .update({
+      start_time: newDate,
+      end_time: new Date(new Date(newDate).getTime() + 60 * 60 * 1000).toISOString()
+    })
+    .eq('mission_id', missionId)
+    .eq('user_id', userId);
+
+  return data;
 }
 
 async function saveMessage(supabase: any, conversationId: string, userId: string, role: string, content: string) {
