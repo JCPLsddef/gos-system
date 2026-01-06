@@ -1,5 +1,5 @@
 /**
- * AI-powered chatbot using OpenAI GPT-4o-mini
+ * AI-powered chatbot using Google Gemini
  * Understands natural language and executes GOS commands
  */
 
@@ -46,142 +46,121 @@ export async function chatAIResponse(
     arguments: any;
   };
 }> {
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY;
 
   if (!apiKey) {
     return {
-      message: "AI is not configured. Please add OPENAI_API_KEY to environment variables.",
+      message: "AI is not configured. Please add GEMINI_API_KEY to environment variables.",
     };
   }
 
-  const messages = [
-    { role: "system", content: SYSTEM_PROMPT },
-    ...previousMessages.slice(-10), // Last 10 messages for context
-    { role: "user", content: userMessage },
-  ];
-
-  const tools = [
-    {
-      type: "function",
-      function: {
-        name: "create_mission",
-        description: "Create a new mission or task",
-        parameters: {
-          type: "object",
-          properties: {
-            title: {
-              type: "string",
-              description: "The mission title",
-            },
-          },
-          required: ["title"],
-        },
-      },
-    },
-    {
-      type: "function",
-      function: {
-        name: "create_battlefront",
-        description: "Create a new battlefront (project/category)",
-        parameters: {
-          type: "object",
-          properties: {
-            name: {
-              type: "string",
-              description: "The battlefront name",
-            },
-          },
-          required: ["name"],
-        },
-      },
-    },
-    {
-      type: "function",
-      function: {
-        name: "list_missions",
-        description: "List all user missions",
-        parameters: {
-          type: "object",
-          properties: {},
-        },
-      },
-    },
-    {
-      type: "function",
-      function: {
-        name: "list_battlefronts",
-        description: "List all user battlefronts",
-        parameters: {
-          type: "object",
-          properties: {},
-        },
-      },
-    },
-    {
-      type: "function",
-      function: {
-        name: "list_calendar",
-        description: "List calendar events",
-        parameters: {
-          type: "object",
-          properties: {
-            range: {
-              type: "string",
-              enum: ["today", "week"],
-              description: "Time range for events",
-            },
-          },
-          required: ["range"],
-        },
-      },
-    },
-  ];
+  // Build conversation history for Gemini
+  let conversationHistory = SYSTEM_PROMPT + "\n\n";
+  previousMessages.slice(-10).forEach((msg) => {
+    conversationHistory += `${msg.role === "user" ? "User" : "Assistant"}: ${msg.content}\n`;
+  });
+  conversationHistory += `User: ${userMessage}\n\nRespond as GOS Commander. If the user wants to create a mission, start your response with [CREATE_MISSION:title]. If creating a battlefront, use [CREATE_BATTLEFRONT:name]. If listing missions, use [LIST_MISSIONS]. If listing battlefronts, use [LIST_BATTLEFRONTS]. If listing calendar, use [LIST_CALENDAR:range]. Otherwise, just respond naturally.`;
 
   try {
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages,
-        tools,
-        temperature: 0.7,
-        max_tokens: 500,
-      }),
-    });
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  text: conversationHistory,
+                },
+              ],
+            },
+          ],
+          generationConfig: {
+            temperature: 0.7,
+            maxOutputTokens: 500,
+          },
+        }),
+      }
+    );
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
-      throw new Error(error.error?.message || `OpenAI API error: ${response.status}`);
+      throw new Error(error.error?.message || `Gemini API error: ${response.status}`);
     }
 
     const data = await response.json();
-    const choice = data.choices?.[0];
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
-    if (!choice) {
-      throw new Error("No response from OpenAI");
+    if (!text) {
+      throw new Error("No response from Gemini");
     }
 
-    // Check for function call
-    if (choice.message.tool_calls && choice.message.tool_calls.length > 0) {
-      const toolCall = choice.message.tool_calls[0];
+    // Parse for function calls
+    const createMissionMatch = text.match(/\[CREATE_MISSION:(.+?)\]/);
+    const createBattlefrontMatch = text.match(/\[CREATE_BATTLEFRONT:(.+?)\]/);
+    const listMissionsMatch = text.match(/\[LIST_MISSIONS\]/);
+    const listBattlefrontsMatch = text.match(/\[LIST_BATTLEFRONTS\]/);
+    const listCalendarMatch = text.match(/\[LIST_CALENDAR:(.+?)\]/);
+
+    if (createMissionMatch) {
       return {
-        message: choice.message.content || "Executing action...",
+        message: text.replace(/\[CREATE_MISSION:.+?\]/, "").trim(),
         functionCall: {
-          name: toolCall.function.name,
-          arguments: JSON.parse(toolCall.function.arguments),
+          name: "create_mission",
+          arguments: { title: createMissionMatch[1].trim() },
+        },
+      };
+    }
+
+    if (createBattlefrontMatch) {
+      return {
+        message: text.replace(/\[CREATE_BATTLEFRONT:.+?\]/, "").trim(),
+        functionCall: {
+          name: "create_battlefront",
+          arguments: { name: createBattlefrontMatch[1].trim() },
+        },
+      };
+    }
+
+    if (listMissionsMatch) {
+      return {
+        message: text.replace(/\[LIST_MISSIONS\]/, "").trim(),
+        functionCall: {
+          name: "list_missions",
+          arguments: {},
+        },
+      };
+    }
+
+    if (listBattlefrontsMatch) {
+      return {
+        message: text.replace(/\[LIST_BATTLEFRONTS\]/, "").trim(),
+        functionCall: {
+          name: "list_battlefronts",
+          arguments: {},
+        },
+      };
+    }
+
+    if (listCalendarMatch) {
+      return {
+        message: text.replace(/\[LIST_CALENDAR:.+?\]/, "").trim(),
+        functionCall: {
+          name: "list_calendar",
+          arguments: { range: listCalendarMatch[1].trim() },
         },
       };
     }
 
     return {
-      message: choice.message.content || "I'm not sure how to respond to that.",
+      message: text || "I'm not sure how to respond to that.",
     };
   } catch (error: any) {
-    console.error("OpenAI API error:", error);
+    console.error("Gemini API error:", error);
     return {
       message: `I encountered an error: ${error.message}. Please try again.`,
     };
