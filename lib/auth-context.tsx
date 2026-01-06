@@ -44,30 +44,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signIn = async (email: string, password: string) => {
     console.log('🔐 Attempting login for:', email);
-    
+
     const { error, data } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
-    console.log('📊 Login response:', { 
-      hasError: !!error, 
+    console.log('📊 Login response:', {
+      hasError: !!error,
       errorMessage: error?.message,
       hasSession: !!data?.session,
       hasUser: !!data?.user,
-      userId: data?.user?.id 
+      userId: data?.user?.id
     });
 
-    if (!error && data?.session) {
-      console.log('✅ Login successful! Redirecting to dashboard...');
-      
-      // Force a hard navigation to ensure cookies are sent
-      window.location.href = '/dashboard';
-    } else {
-      console.error('❌ Login failed:', error?.message || 'No session created');
+    if (error) {
+      console.error('❌ Login failed:', error.message);
+      return { error };
     }
 
-    return { error };
+    if (!data?.session) {
+      console.error('❌ Login failed: No session created');
+      return { error: { message: 'No session created' } as any };
+    }
+
+    console.log('✅ Login successful! Session created');
+    console.log('🔄 Refreshing router to sync server state...');
+
+    // Update local state immediately
+    setSession(data.session);
+    setUser(data.user);
+
+    // Refresh the router cache to pick up the new session on the server
+    router.refresh();
+
+    // Small delay to ensure refresh completes, then navigate
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    console.log('✅ Navigating to dashboard...');
+    router.push('/dashboard');
+
+    return { error: null };
   };
 
   const signUp = async (email: string, password: string) => {

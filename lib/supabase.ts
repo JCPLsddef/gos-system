@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { createBrowserClient } from '@supabase/ssr';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -10,7 +10,7 @@ if (process.env.NODE_ENV === 'development') {
   } else {
     console.log('✅ Supabase URL configured:', new URL(supabaseUrl).hostname);
   }
-  
+
   if (!supabaseAnonKey) {
     console.error('❌ NEXT_PUBLIC_SUPABASE_ANON_KEY is missing');
   } else {
@@ -18,10 +18,6 @@ if (process.env.NODE_ENV === 'development') {
   }
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-  },
-});
+// ✅ USE createBrowserClient for cookie-based auth compatible with middleware
+// It automatically handles cookies without needing custom handlers
+export const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);

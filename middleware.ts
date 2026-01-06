@@ -9,15 +9,35 @@ export async function middleware(request: NextRequest) {
     },
   });
 
+  // Log ALL cookies FIRST
+  const allCookies = request.cookies.getAll();
+  const cookieNames = allCookies.map(c => c.name);
+  const supabaseCookies = allCookies.filter(c => 
+    c.name.includes('supabase') || 
+    c.name.includes('sb-') ||
+    c.name.includes('auth')
+  );
+  
+  console.log('🛡️ Middleware INITIAL check:', {
+    path: request.nextUrl.pathname,
+    allCookiesCount: allCookies.length,
+    allCookieNames: cookieNames,
+    supabaseCookiesCount: supabaseCookies.length,
+    supabaseCookieNames: supabaseCookies.map(c => c.name),
+  });
+
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
         get(name: string) {
-          return request.cookies.get(name)?.value;
+          const value = request.cookies.get(name)?.value;
+          console.log(`🍪 Cookie GET: ${name} = ${value ? 'EXISTS' : 'MISSING'}`);
+          return value;
         },
         set(name: string, value: string, options: CookieOptions) {
+          console.log(`🍪 Cookie SET: ${name}`);
           request.cookies.set({
             name,
             value,
@@ -35,6 +55,7 @@ export async function middleware(request: NextRequest) {
           });
         },
         remove(name: string, options: CookieOptions) {
+          console.log(`🍪 Cookie REMOVE: ${name}`);
           request.cookies.set({
             name,
             value: "",
@@ -57,12 +78,10 @@ export async function middleware(request: NextRequest) {
 
   const { data } = await supabase.auth.getUser();
 
-  console.log('🛡️ Middleware check:', {
+  console.log('🛡️ Middleware AFTER getUser:', {
     path: request.nextUrl.pathname,
     hasUser: !!data?.user,
     userId: data?.user?.id,
-    cookiesCount: request.cookies.getAll().length,
-    cookieNames: request.cookies.getAll().map(c => c.name)
   });
 
   if (!data?.user) {
