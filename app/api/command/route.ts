@@ -1,18 +1,10 @@
 import { NextResponse } from 'next/server';
 import { parseCommand, getDateRangeInEST, formatDateInEST } from '@/lib/command-parser';
-import { authenticateRequest } from '@/lib/api-auth';
 import { createClient } from '@supabase/supabase-js';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const preferredRegion = 'auto';
-
-function getSupabaseClient() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
-}
 
 export async function GET() {
   return NextResponse.json(
@@ -26,14 +18,36 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const supabase = getSupabaseClient();
   try {
-    // Authenticate
-    const { userId, error: authError } = await authenticateRequest(request);
-
-    if (!userId || authError) {
-      return NextResponse.json({ error: authError || 'Unauthorized' }, { status: 401 });
+    // Extract auth token from request
+    const authHeader = request.headers.get('authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return NextResponse.json({ error: { message: 'Unauthorized' } }, { status: 401 });
     }
+
+    const token = authHeader.replace('Bearer ', '');
+
+    // Create Supabase client with user's token (uses RLS policies)
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        global: {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
+      }
+    );
+
+    // Verify authentication and get user
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+    if (authError || !user) {
+      return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 });
+    }
+
+    const userId = user.id;
 
     // Parse body
     let body;
