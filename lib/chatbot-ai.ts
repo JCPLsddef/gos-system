@@ -1,5 +1,5 @@
 /**
- * AI-powered chatbot using Google Gemini
+ * AI-powered chatbot using Groq (Llama 3)
  * Understands natural language and executes GOS commands
  */
 
@@ -46,57 +46,52 @@ export async function chatAIResponse(
     arguments: any;
   };
 }> {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.GROQ_API_KEY;
 
   if (!apiKey) {
     return {
-      message: "AI is not configured. Please add GEMINI_API_KEY to environment variables.",
+      message: "AI is not configured. Please add GROQ_API_KEY to environment variables.",
     };
   }
 
-  // Build conversation history for Gemini
-  let conversationHistory = SYSTEM_PROMPT + "\n\n";
-  previousMessages.slice(-10).forEach((msg) => {
-    conversationHistory += `${msg.role === "user" ? "User" : "Assistant"}: ${msg.content}\n`;
-  });
-  conversationHistory += `User: ${userMessage}\n\nRespond as GOS Commander. If the user wants to create a mission, start your response with [CREATE_MISSION:title]. If creating a battlefront, use [CREATE_BATTLEFRONT:name]. If listing missions, use [LIST_MISSIONS]. If listing battlefronts, use [LIST_BATTLEFRONTS]. If listing calendar, use [LIST_CALENDAR:range]. Otherwise, just respond naturally.`;
+  // Build messages array for Groq (OpenAI-compatible format)
+  const messages = [
+    {
+      role: "system",
+      content: SYSTEM_PROMPT + "\n\nIMPORTANT: When users ask you to perform actions, respond with special markers:\n- To create a mission, start response with [CREATE_MISSION:title]\n- To create a battlefront, use [CREATE_BATTLEFRONT:name]\n- To list missions, use [LIST_MISSIONS]\n- To list battlefronts, use [LIST_BATTLEFRONTS]\n- To list calendar, use [LIST_CALENDAR:range]\nOtherwise, just respond naturally as GOS Commander."
+    },
+    ...previousMessages.slice(-10).map((msg) => ({
+      role: msg.role === "user" ? "user" : "assistant",
+      content: msg.content,
+    })),
+    { role: "user", content: userMessage },
+  ];
 
   try {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                {
-                  text: conversationHistory,
-                },
-              ],
-            },
-          ],
-          generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 500,
-          },
-        }),
-      }
-    );
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: "llama-3.1-8b-instant",
+        messages,
+        temperature: 0.7,
+        max_tokens: 500,
+      }),
+    });
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
-      throw new Error(error.error?.message || `Gemini API error: ${response.status}`);
+      throw new Error(error.error?.message || `Groq API error: ${response.status}`);
     }
 
     const data = await response.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    const text = data.choices?.[0]?.message?.content;
 
     if (!text) {
-      throw new Error("No response from Gemini");
+      throw new Error("No response from Groq");
     }
 
     // Parse for function calls
@@ -160,7 +155,7 @@ export async function chatAIResponse(
       message: text || "I'm not sure how to respond to that.",
     };
   } catch (error: any) {
-    console.error("Gemini API error:", error);
+    console.error("Groq API error:", error);
     return {
       message: `I encountered an error: ${error.message}. Please try again.`,
     };
