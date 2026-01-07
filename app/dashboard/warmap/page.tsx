@@ -328,15 +328,15 @@ export default function WarMapPage() {
               className="bg-slate-900/50 border-slate-700 hover:border-slate-500 transition-all flex flex-col"
             >
               <div className="p-6 flex flex-col h-full">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                <div className="flex items-start justify-between mb-4 gap-3">
+                  <div className="flex items-start gap-3 min-w-0 flex-1">
                     <div
-                      className="w-4 h-4 rounded-full flex-shrink-0"
+                      className="w-4 h-4 rounded-full flex-shrink-0 mt-1"
                       style={{ backgroundColor: getColorHex(front.color) }}
                       title={`Color: ${front.color}`}
                     />
-                    <Link href={`/dashboard/battlefronts/${front.id}`} className="min-w-0">
-                      <h3 className="text-base md:text-lg lg:text-xl font-bold text-white hover:text-blue-400 transition-colors cursor-pointer truncate">
+                    <Link href={`/dashboard/battlefronts/${front.id}`} className="min-w-0 flex-1">
+                      <h3 className="text-sm md:text-base lg:text-lg xl:text-xl font-bold text-white hover:text-blue-400 transition-colors cursor-pointer line-clamp-2 leading-tight">
                         {front.name}
                       </h3>
                     </Link>

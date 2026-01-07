@@ -232,7 +232,7 @@ export default function BattlefrontPage() {
           ) : (
             <h1
               onClick={() => setEditingName(true)}
-              className="text-xl md:text-2xl lg:text-4xl font-bold text-white cursor-pointer hover:text-blue-400 transition-colors truncate"
+              className="text-lg md:text-xl lg:text-3xl xl:text-4xl font-bold text-white cursor-pointer hover:text-blue-400 transition-colors line-clamp-2 leading-tight"
             >
               BATTLEFRONT: {battlefront.name}
             </h1>
