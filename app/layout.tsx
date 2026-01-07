@@ -10,18 +10,7 @@ export const metadata: Metadata = {
   title: 'GOS Command Center',
   description: 'Strategic life operating system for execution and accountability',
   manifest: '/manifest.json',
-  themeColor: '#1e40af',
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: 'black-translucent',
-    title: 'GOS',
-  },
-  viewport: {
-    width: 'device-width',
-    initialScale: 1,
-    maximumScale: 1,
-    userScalable: false,
-  },
+  themeColor: '#2563eb',
 };
 
 export default function RootLayout({
@@ -31,9 +20,6 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <head>
-        <link rel="apple-touch-icon" href="/icon-192.png" />
-      </head>
       <body className={inter.className}>
         <AuthProvider>
           {children}

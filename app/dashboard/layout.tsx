@@ -20,6 +20,8 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Chatbot } from '@/components/chatbot';
+import { BootSequence } from '@/components/boot-sequence';
+import { startNotificationPolling, requestNotificationPermission } from '@/lib/notifications';
 
 const navigation = [
   { name: 'Grand Strategy', href: '/dashboard/strategy', icon: Target },
@@ -36,6 +38,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter();
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [showBootSequence, setShowBootSequence] = useState(false);
+  const [bootComplete, setBootComplete] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -43,12 +47,53 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   }, [user, loading, router]);
 
+  useEffect(() => {
+    if (user && !loading) {
+      const navEntries = performance.getEntriesByType('navigation') as PerformanceNavigationTiming[];
+      const navType = navEntries[0]?.type;
+      const isReload = navType === 'reload';
+      const isNewLoad = navType === 'navigate' || navType === 'back_forward';
+      const introDone = sessionStorage.getItem('gos_intro_done');
+      const lastBootTime = sessionStorage.getItem('gos_boot_time');
+      const now = Date.now();
+
+      if (isReload || !introDone || (lastBootTime && now - parseInt(lastBootTime) > 3600000)) {
+        sessionStorage.setItem('gos_boot_time', now.toString());
+        setShowBootSequence(true);
+      } else {
+        setBootComplete(true);
+      }
+    }
+  }, [user, loading]);
+
+  const handleBootComplete = () => {
+    sessionStorage.setItem('gos_intro_done', '1');
+    setShowBootSequence(false);
+    setBootComplete(true);
+  };
+
+  useEffect(() => {
+    if (bootComplete && user) {
+      requestNotificationPermission();
+      const cleanup = startNotificationPolling(user.id);
+      return cleanup;
+    }
+  }, [bootComplete, user]);
+
   if (loading || !user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-black via-slate-900 to-blue-950">
         <div className="text-white text-xl">Loading command center...</div>
       </div>
     );
+  }
+
+  if (showBootSequence) {
+    return <BootSequence onComplete={handleBootComplete} />;
+  }
+
+  if (!bootComplete) {
+    return null;
   }
 
   return (

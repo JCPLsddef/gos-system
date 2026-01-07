@@ -25,10 +25,10 @@ type Conversation = {
 };
 
 const QUICK_SUGGESTIONS = [
-  'list battlefronts',
-  'list missions',
-  'show today',
-  'create mission Test Task',
+  'Show my system status',
+  'Create a new battlefront',
+  'List my missions',
+  'Help me plan my week',
 ];
 
 export function Chatbot() {
@@ -90,7 +90,7 @@ export function Chatbot() {
 
         const welcomeMessage: Message = {
           role: 'assistant',
-          content: `Welcome to GOS Commander!\n\nI'm your command interface for managing missions, battlefronts, and calendar events.\n\n**Commands I understand:**\n• create mission <title>\n• create battlefront <name>\n• list missions\n• list battlefronts\n• schedule <title> tomorrow 10am for 2 hours\n• show today\n• show this week\n• delete mission <id>\n\nTry "list missions" to get started!`,
+          content: `Hey! I'm your GOS Commander - think of me as your personal strategic coach.\n\nI'm here to help you win at life by:\n• Organizing your goals into battlefronts\n• Breaking down big objectives into missions\n• Planning your time strategically\n• Tracking what's working (and what's not)\n• Making better decisions faster\n\nI'll remember our conversations and help you build momentum over time.\n\nWhat's on your mind? Want to get organized, tackle a specific challenge, or just see where you're at?`,
           timestamp: new Date(),
         };
 
@@ -103,7 +103,7 @@ export function Chatbot() {
 
       const fallbackMessage: Message = {
         role: 'assistant',
-        content: `Welcome to GOS Commander!\n\nTry commands like:\n• list missions\n• create battlefront Fitness\n• show today`,
+        content: `Hey! I'm your GOS Commander.\n\nI'm here to help you organize your goals, plan strategically, and execute with confidence.\n\nWhat's on your mind?`,
         timestamp: new Date(),
       };
       setMessages([fallbackMessage]);
@@ -189,15 +189,18 @@ export function Chatbot() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
 
-      const response = await fetch('/api/command', {
+      const response = await fetch('/api/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session?.access_token}`,
         },
         body: JSON.stringify({
-          message: content,
-          conversationId: currentConvId,
+          messages: [...messages, userMessage].map((m) => ({
+            role: m.role,
+            content: m.content,
+          })),
+          userId: user.id,
         }),
       });
 

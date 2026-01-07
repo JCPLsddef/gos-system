@@ -1,163 +1,158 @@
 import { NextResponse } from 'next/server';
 import { parseCommand, getDateRangeInEST, formatDateInEST } from '@/lib/command-parser';
+import { authenticateRequest } from '@/lib/api-auth';
 import { createClient } from '@supabase/supabase-js';
-import { chatAIResponse } from '@/lib/chatbot-ai';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-export const preferredRegion = 'auto';
 
-export async function GET() {
-  return NextResponse.json(
-    { ok: true, message: 'API command route reachable' },
-    {
-      headers: {
-        'Allow': 'GET, POST'
-      }
-    }
+function getSupabaseClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 }
 
 export async function POST(request: Request) {
+  const supabase = getSupabaseClient();
   try {
-    // Extract auth token from request
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json({ error: { message: 'Unauthorized' } }, { status: 401 });
+    const { userId, error: authError } = await authenticateRequest(request);
+
+    if (!userId || authError) {
+      return NextResponse.json({ error: authError || 'Unauthorized' }, { status: 401 });
     }
 
-    const token = authHeader.replace('Bearer ', '');
-
-    // Create Supabase client with user's token (uses RLS policies)
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        global: {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        }
-      }
-    );
-
-    // Verify authentication and get user
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-
-    if (authError || !user) {
-      return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 });
-    }
-
-    const userId = user.id;
-
-    // Parse body
-    let body;
-    try {
-      body = await request.json();
-    } catch {
-      return NextResponse.json(
-        { error: 'Invalid JSON body' },
-        { status: 400 }
-      );
-    }
-
+    const body = await request.json();
     const { message, conversationId } = body;
 
     if (!message) {
       return NextResponse.json({ error: 'Message required' }, { status: 400 });
     }
 
-    // Load conversation history for AI context
-    let previousMessages: Array<{ role: string; content: string }> = [];
-    if (conversationId) {
-      const { data: messagesData } = await supabase
-        .from('messages')
-        .select('role, content')
-        .eq('conversation_id', conversationId)
-        .order('created_at', { ascending: false })
-        .limit(10);
+    const command = parseCommand(message);
 
-      if (messagesData) {
-        previousMessages = messagesData.reverse();
-      }
-    }
-
-    // Use AI to understand the command
-    const aiResponse = await chatAIResponse(message, previousMessages);
-
-    // Execute command based on AI function call or fallback to parser
-    let response: string = '';
+    let response: string = 'Command processed';
     let data: any = null;
 
-    if (aiResponse.functionCall) {
-      const { name, arguments: args } = aiResponse.functionCall;
-
-      try {
-        switch (name) {
-          case 'create_mission':
-            const missionResult = await createMission(supabase, userId, { title: args.title });
-            response = `✓ Mission created: "${missionResult.title}"`;
-            data = missionResult;
-            break;
-
-          case 'create_battlefront':
-            const battlefrontResult = await createBattlefront(supabase, userId, { name: args.name });
-            response = `✓ Battlefront created: "${battlefrontResult.name}"`;
-            data = battlefrontResult;
-            break;
-
-          case 'list_missions':
-            const missions = await listMissions(supabase, userId);
-            if (missions.length === 0) {
-              response = 'No missions yet. Create one to get started!';
-            } else {
-              response = `**Your Missions (${missions.length}):**\n\n` +
-                missions.map((m: any) => `• ${m.title} [${m.status}]${m.due_date ? ` - Due: ${formatDateInEST(new Date(m.due_date))}` : ''}`).join('\n');
-            }
-            data = missions;
-            break;
-
-          case 'list_battlefronts':
-            const battlefronts = await listBattlefronts(supabase, userId);
-            if (battlefronts.length === 0) {
-              response = 'No battlefronts yet. Create one to organize your missions!';
-            } else {
-              response = `**Your Battlefronts (${battlefronts.length}):**\n\n` +
-                battlefronts.map((b: any) => `• ${b.name} [${b.status}]`).join('\n');
-            }
-            data = battlefronts;
-            break;
-
-          case 'list_calendar':
-            const events = await listCalendarEvents(supabase, userId, args.range || 'today');
-            if (events.length === 0) {
-              response = args.range === 'today' ? 'No events scheduled today.' : 'No events scheduled this week.';
-            } else {
-              response = `**${args.range === 'today' ? 'Today' : 'This Week'} (${events.length} events):**\n\n` +
-                events.map((e: any) => `• ${e.title} - ${formatDateInEST(new Date(e.start_time))}`).join('\n');
-            }
-            data = events;
-            break;
-
-          case 'update_mission_date':
-            const updateResult = await updateMissionDate(supabase, userId, args.missionId, args.newDate);
-            response = `✓ Mission date updated to ${formatDateInEST(new Date(args.newDate))}`;
-            data = updateResult;
-            break;
-
-          default:
-            response = aiResponse.message || "I understood your request but couldn't execute it.";
+    switch (command.action) {
+      case 'create':
+        if (command.entity === 'mission') {
+          const result = await createMission(supabase, userId, command.params);
+          response = `✓ Mission created: "${result.title}"`;
+          data = result;
+        } else if (command.entity === 'battlefront') {
+          const result = await createBattlefront(supabase, userId, command.params);
+          response = `✓ Battlefront created: "${result.name}"`;
+          data = result;
+        } else {
+          response = 'Unknown entity to create.';
         }
-      } catch (error: any) {
-        response = `Error executing command: ${error.message}`;
-      }
-    } else {
-      // No function call, just return AI response
-      response = aiResponse.message;
+        break;
+
+      case 'create_with_calendar':
+        if (command.entity === 'mission') {
+          const missionResult = await createMission(supabase, userId, { title: command.params.title });
+          const eventResult = await scheduleEvent(supabase, userId, {
+            title: command.params.title,
+            start_time: command.params.start_time,
+            end_time: command.params.end_time,
+            mission_id: missionResult.id
+          });
+          response = `✓ Mission "${missionResult.title}" created with calendar event on ${formatDateInEST(new Date(command.params.start_time))} for ${command.params.duration_minutes} minutes`;
+          data = { mission: missionResult, event: eventResult };
+        }
+        break;
+
+      case 'list':
+        if (command.entity === 'mission') {
+          const missions = await listMissions(supabase, userId);
+          if (missions.length === 0) {
+            response = 'No missions yet. Create one with: `create mission <title>`';
+          } else {
+            response = `**Your Missions (${missions.length}):**\n\n` +
+              missions.map((m: any) => `• ${m.title} [${m.status}]${m.due_date ? ` - Due: ${formatDateInEST(new Date(m.due_date))}` : ''}`).join('\n');
+          }
+          data = missions;
+        } else if (command.entity === 'battlefront') {
+          const battlefronts = await listBattlefronts(supabase, userId);
+          if (battlefronts.length === 0) {
+            response = 'No battlefronts yet. Create one with: `create battlefront <name>`';
+          } else {
+            response = `**Your Battlefronts (${battlefronts.length}):**\n\n` +
+              battlefronts.map((b: any) => `• ${b.name} [${b.status}]`).join('\n');
+          }
+          data = battlefronts;
+        } else if (command.entity === 'calendar') {
+          const events = await listCalendarEvents(supabase, userId, command.params.range);
+          if (events.length === 0) {
+            response = command.params.range === 'today'
+              ? 'No events scheduled today.'
+              : 'No events scheduled this week.';
+          } else {
+            response = `**${command.params.range === 'today' ? 'Today' : 'This Week'} (${events.length} events):**\n\n` +
+              events.map((e: any) => `• ${e.title} - ${formatDateInEST(new Date(e.start_time))} to ${formatDateInEST(new Date(e.end_time))}`).join('\n');
+          }
+          data = events;
+        } else {
+          response = 'Unknown entity to list.';
+        }
+        break;
+
+      case 'schedule':
+        const event = await scheduleEvent(supabase, userId, command.params);
+        response = `✓ Scheduled: "${event.title}" on ${formatDateInEST(new Date(event.start_time))} for ${command.params.duration_minutes} minutes`;
+        data = event;
+        break;
+
+      case 'delete':
+        if (command.entity === 'mission' && command.params.id) {
+          await deleteMission(supabase, userId, command.params.id);
+          response = `✓ Mission deleted`;
+        } else if (command.entity === 'battlefront' && command.params.id) {
+          await deleteBattlefront(supabase, userId, command.params.id);
+          response = `✓ Battlefront deleted`;
+        } else if (command.entity === 'calendar' && command.params.id) {
+          await deleteCalendarEvent(supabase, userId, command.params.id);
+          response = `✓ Event deleted`;
+        } else {
+          response = 'ID required for delete operations.';
+        }
+        break;
+
+      case 'update_duration':
+        if (command.entity === 'mission' && command.params.id && command.params.duration) {
+          await updateMissionDuration(supabase, userId, command.params.id, command.params.duration);
+          response = `✓ Mission duration updated to ${command.params.duration} minutes`;
+        } else {
+          response = 'Missing mission ID or duration.';
+        }
+        break;
+
+      case 'link':
+        if (command.entity === 'event_to_mission' && command.params.eventId && command.params.missionId) {
+          await linkEventToMission(supabase, userId, command.params.eventId, command.params.missionId);
+          response = `✓ Event linked to mission`;
+        } else {
+          response = 'Missing event ID or mission ID.';
+        }
+        break;
+
+      case 'unknown':
+      default:
+        response = `I didn't understand that command. Try:\n\n` +
+          `• **create mission <title>**\n` +
+          `• **build mission <title> tomorrow 2pm for 1 hour**\n` +
+          `• **create battlefront <name>**\n` +
+          `• **list missions**\n` +
+          `• **list battlefronts**\n` +
+          `• **schedule <title> tomorrow 10am for 2 hours**\n` +
+          `• **show today**\n` +
+          `• **show this week**\n` +
+          `• **update mission <id> duration 2h**\n` +
+          `• **delete mission <id>**`;
     }
 
-    // Save conversation if ID provided
-    if (conversationId && response) {
+    if (conversationId) {
       await saveMessage(supabase, conversationId, userId, 'user', message);
       await saveMessage(supabase, conversationId, userId, 'assistant', response);
     }
@@ -165,7 +160,8 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       message: response,
-      data
+      data,
+      command
     });
 
   } catch (error: any) {
@@ -177,75 +173,18 @@ export async function POST(request: Request) {
   }
 }
 
-// Database operations
 async function createMission(supabase: any, userId: string, params: any) {
-  // Get or create a default battlefront for the user
-  let battlefrontId = params.battlefrontId;
-
-  if (!battlefrontId) {
-    // Try to find existing "General" or "Inbox" battlefront
-    const { data: existingBattlefronts } = await supabase
-      .from('battlefronts')
-      .select('id')
-      .eq('user_id', userId)
-      .or('name.eq.General,name.eq.Inbox')
-      .limit(1)
-      .maybeSingle();
-
-    if (existingBattlefronts) {
-      battlefrontId = existingBattlefronts.id;
-    } else {
-      // Create a default "General" battlefront
-      const { data: newBattlefront, error: battlefrontError } = await supabase
-        .from('battlefronts')
-        .insert({
-          user_id: userId,
-          name: 'General',
-          status: 'ACTIVE'
-        })
-        .select('id')
-        .single();
-
-      if (battlefrontError) throw new Error(`Failed to create default battlefront: ${battlefrontError.message}`);
-      battlefrontId = newBattlefront.id;
-    }
-  }
-
-  // Calculate due date (default to tomorrow at 5pm EST)
-  const dueDate = params.dueDate || new Date(Date.now() + 24 * 60 * 60 * 1000);
-  const durationMinutes = params.durationMinutes || 60;
-
   const { data, error } = await supabase
     .from('missions')
     .insert({
       user_id: userId,
-      battlefront_id: battlefrontId,
       title: params.title,
-      due_date: dueDate,
-      attack_date: params.attackDate || dueDate,
-      duration_minutes: durationMinutes,
       status: 'NOT_DONE'
     })
     .select()
     .single();
 
   if (error) throw new Error(error.message);
-
-  // Automatically create a calendar event for this mission
-  const startTime = new Date(dueDate);
-  const endTime = new Date(startTime.getTime() + durationMinutes * 60 * 1000);
-
-  await supabase
-    .from('calendar_events')
-    .insert({
-      user_id: userId,
-      title: params.title,
-      start_time: startTime.toISOString(),
-      end_time: endTime.toISOString(),
-      description: `Mission: ${params.title}`,
-      mission_id: data.id
-    });
-
   return data;
 }
 
@@ -286,6 +225,23 @@ async function listBattlefronts(supabase: any, userId: string) {
   return data || [];
 }
 
+async function scheduleEvent(supabase: any, userId: string, params: any) {
+  const { data, error } = await supabase
+    .from('calendar_events')
+    .insert({
+      user_id: userId,
+      title: params.title,
+      start_time: params.start_time,
+      end_time: params.end_time,
+      mission_id: params.mission_id || null
+    })
+    .select()
+    .single();
+
+  if (error) throw new Error(error.message);
+  return data;
+}
+
 async function listCalendarEvents(supabase: any, userId: string, range: 'today' | 'week') {
   const { start, end } = getDateRangeInEST(range);
 
@@ -301,31 +257,54 @@ async function listCalendarEvents(supabase: any, userId: string, range: 'today' 
   return data || [];
 }
 
-async function updateMissionDate(supabase: any, userId: string, missionId: string, newDate: string) {
-  const { data, error } = await supabase
+async function deleteMission(supabase: any, userId: string, id: string) {
+  const { error } = await supabase
     .from('missions')
-    .update({
-      due_date: newDate,
-      attack_date: newDate
-    })
-    .eq('id', missionId)
-    .eq('user_id', userId)
-    .select()
-    .single();
-
-  if (error) throw new Error(error.message);
-
-  // Update associated calendar event if exists
-  await supabase
-    .from('calendar_events')
-    .update({
-      start_time: newDate,
-      end_time: new Date(new Date(newDate).getTime() + 60 * 60 * 1000).toISOString()
-    })
-    .eq('mission_id', missionId)
+    .delete()
+    .eq('id', id)
     .eq('user_id', userId);
 
-  return data;
+  if (error) throw new Error(error.message);
+}
+
+async function deleteBattlefront(supabase: any, userId: string, id: string) {
+  const { error } = await supabase
+    .from('battlefronts')
+    .delete()
+    .eq('id', id)
+    .eq('user_id', userId);
+
+  if (error) throw new Error(error.message);
+}
+
+async function deleteCalendarEvent(supabase: any, userId: string, id: string) {
+  const { error } = await supabase
+    .from('calendar_events')
+    .delete()
+    .eq('id', id)
+    .eq('user_id', userId);
+
+  if (error) throw new Error(error.message);
+}
+
+async function updateMissionDuration(supabase: any, userId: string, missionId: string, duration: number) {
+  const { error } = await supabase
+    .from('missions')
+    .update({ duration_minutes: duration })
+    .eq('id', missionId)
+    .eq('user_id', userId);
+
+  if (error) throw new Error(error.message);
+}
+
+async function linkEventToMission(supabase: any, userId: string, eventId: string, missionId: string) {
+  const { error } = await supabase
+    .from('calendar_events')
+    .update({ mission_id: missionId })
+    .eq('id', eventId)
+    .eq('user_id', userId);
+
+  if (error) throw new Error(error.message);
 }
 
 async function saveMessage(supabase: any, conversationId: string, userId: string, role: string, content: string) {

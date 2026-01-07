@@ -1,9 +1,23 @@
 'use client';
 
-import { Card } from '@/components/ui/card';
+import { useAuth } from '@/lib/auth-context';
 import { Shield } from 'lucide-react';
+import { CodeOfHonor } from '@/components/war-room/code-of-honor';
+import { NonNegotiables } from '@/components/war-room/non-negotiables';
+import { Disqualifiers } from '@/components/war-room/disqualifiers';
+import { WeeklyReview } from '@/components/war-room/weekly-review';
 
 export default function WarRoomPage() {
+  const { user } = useAuth();
+
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-white text-lg">Please log in</div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-7xl mx-auto space-y-6">
       <div className="flex items-center gap-3">
@@ -14,10 +28,14 @@ export default function WarRoomPage() {
         </div>
       </div>
 
-      <Card className="bg-slate-900/50 border-slate-700 p-8 text-center">
-        <h3 className="text-xl text-white mb-2">Code of Honor</h3>
-        <p className="text-slate-400">Define your principles and track commitments</p>
-      </Card>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <CodeOfHonor userId={user.id} />
+        <NonNegotiables userId={user.id} />
+      </div>
+
+      <Disqualifiers userId={user.id} />
+
+      <WeeklyReview userId={user.id} />
     </div>
   );
 }

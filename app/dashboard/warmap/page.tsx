@@ -13,12 +13,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from 'sonner';
 import { Plus, Sword, Shield, Skull } from 'lucide-react';
 import Link from 'next/link';
+import { ColorPicker } from '@/components/color-picker';
+import { getColorHex } from '@/lib/color-mapping';
 
 type Battlefront = {
   id: string;
   name: string;
   status: 'ACTIVE' | 'WON' | 'COLLAPSING';
   binary_exit_target: string;
+  color: string;
   checkpointsDone: number;
   checkpointsTotal: number;
   missionsDone: number;
@@ -32,6 +35,7 @@ export default function WarMapPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newName, setNewName] = useState('');
   const [newStatus, setNewStatus] = useState<'ACTIVE' | 'WON' | 'COLLAPSING'>('ACTIVE');
+  const [newColor, setNewColor] = useState('blue');
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
@@ -59,16 +63,17 @@ export default function WarMapPage() {
 
           const { data: missions } = await supabase
             .from('missions')
-            .select('status')
+            .select('completed_at')
             .eq('battlefront_id', front.id);
 
           const checkpointsDone = checkpoints?.filter((c) => c.done).length || 0;
           const checkpointsTotal = checkpoints?.length || 0;
-          const missionsDone = missions?.filter((m) => m.status === 'DONE').length || 0;
+          const missionsDone = missions?.filter((m) => m.completed_at !== null).length || 0;
           const missionsTotal = missions?.length || 0;
 
           return {
             ...front,
+            color: front.color || 'blue',
             checkpointsDone,
             checkpointsTotal,
             missionsDone,
@@ -98,6 +103,7 @@ export default function WarMapPage() {
         user_id: user.id,
         name: newName,
         status: newStatus,
+        color: newColor,
         binary_exit_target: '',
       });
 
@@ -107,11 +113,30 @@ export default function WarMapPage() {
       setDialogOpen(false);
       setNewName('');
       setNewStatus('ACTIVE');
+      setNewColor('blue');
       loadBattlefronts();
     } catch (error: any) {
       toast.error('Failed to create battlefront');
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleUpdateColor = async (frontId: string, color: string) => {
+    try {
+      const { error } = await supabase
+        .from('battlefronts')
+        .update({ color })
+        .eq('id', frontId);
+
+      if (error) throw error;
+
+      setBattlefronts(battlefronts.map((bf) =>
+        bf.id === frontId ? { ...bf, color } : bf
+      ));
+      toast.success('Color updated');
+    } catch (error) {
+      toast.error('Failed to update color');
     }
   };
 
@@ -191,6 +216,13 @@ export default function WarMapPage() {
                   </SelectContent>
                 </Select>
               </div>
+              <div className="space-y-2">
+                <Label>Color</Label>
+                <div className="flex items-center gap-3">
+                  <ColorPicker value={newColor} onChange={setNewColor} />
+                  <span className="text-slate-400 text-sm capitalize">{newColor}</span>
+                </div>
+              </div>
               <Button
                 onClick={createBattlefront}
                 disabled={creating}
@@ -213,53 +245,84 @@ export default function WarMapPage() {
           </Button>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
           {battlefronts.map((front) => (
-            <Link key={front.id} href={`/dashboard/battlefront/${front.id}`}>
-              <Card className="bg-slate-900/50 border-slate-700 hover:border-blue-500 transition-all cursor-pointer h-full p-6">
-                <div className="space-y-4">
-                  <div className="flex items-start justify-between">
-                    <h3 className="text-xl font-bold text-white">{front.name}</h3>
-                    <Badge className={`${getStatusColor(front.status)} text-white flex items-center gap-1`}>
+            <Card
+              key={front.id}
+              className="bg-slate-900/50 border-slate-700 hover:border-slate-500 transition-all flex flex-col"
+            >
+              <div className="p-6 flex flex-col h-full">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div
+                      className="w-4 h-4 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: getColorHex(front.color) }}
+                      title={`Color: ${front.color}`}
+                    />
+                    <Link href={`/dashboard/battlefronts/${front.id}`} className="min-w-0">
+                      <h3 className="text-xl font-bold text-white hover:text-blue-400 transition-colors cursor-pointer truncate">
+                        {front.name}
+                      </h3>
+                    </Link>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                    <ColorPicker
+                      value={front.color}
+                      onChange={(color) => handleUpdateColor(front.id, color)}
+                    />
+                    <Badge className={`${getStatusColor(front.status)} text-white flex items-center gap-1 whitespace-nowrap`}>
                       {getStatusIcon(front.status)}
                       {front.status}
                     </Badge>
                   </div>
+                </div>
 
-                  {front.binary_exit_target && (
+                <div className="h-10 mb-4">
+                  {front.binary_exit_target ? (
                     <p className="text-sm text-slate-400 line-clamp-2">{front.binary_exit_target}</p>
+                  ) : (
+                    <p className="text-sm text-slate-600 italic">No target set</p>
                   )}
+                </div>
 
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-slate-400">Checkpoints</span>
-                      <span className="text-white font-semibold">
-                        {front.checkpointsDone} / {front.checkpointsTotal}
-                      </span>
-                    </div>
-                    <div className="w-full bg-slate-700 rounded-full h-2">
-                      <div
-                        className="bg-blue-600 h-2 rounded-full transition-all"
-                        style={{
-                          width: `${
-                            front.checkpointsTotal > 0
-                              ? (front.checkpointsDone / front.checkpointsTotal) * 100
-                              : 0
-                          }%`,
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between text-sm pt-2 border-t border-slate-700">
-                    <span className="text-slate-400">Weekly Missions</span>
+                <div className="space-y-2 mb-4">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-slate-400">Checkpoints</span>
                     <span className="text-white font-semibold">
-                      {front.missionsDone} / {front.missionsTotal}
+                      {front.checkpointsDone} / {front.checkpointsTotal}
                     </span>
                   </div>
+                  <div className="w-full bg-slate-700 rounded-full h-2">
+                    <div
+                      className="h-2 rounded-full transition-all"
+                      style={{
+                        backgroundColor: getColorHex(front.color),
+                        width: `${
+                          front.checkpointsTotal > 0
+                            ? (front.checkpointsDone / front.checkpointsTotal) * 100
+                            : 0
+                        }%`,
+                      }}
+                    />
+                  </div>
                 </div>
-              </Card>
-            </Link>
+
+                <div className="flex items-center justify-between text-sm py-3 border-t border-slate-700">
+                  <span className="text-slate-400">Weekly Missions</span>
+                  <span className="text-white font-semibold">
+                    {front.missionsDone} / {front.missionsTotal}
+                  </span>
+                </div>
+
+                <div className="mt-auto pt-2">
+                  <Link href={`/dashboard/battlefronts/${front.id}`}>
+                    <Button variant="outline" className="w-full border-slate-600 hover:bg-slate-800">
+                      View Details
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            </Card>
           ))}
         </div>
       )}
