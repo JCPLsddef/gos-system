@@ -56,15 +56,21 @@ export default function GrandStrategyPage() {
     try {
       const { error } = await supabase
         .from('user_settings')
-        .upsert({
-          user_id: user.id,
-          grand_strategy: strategy,
-        });
+        .upsert(
+          {
+            user_id: user.id,
+            grand_strategy: strategy,
+          },
+          {
+            onConflict: 'user_id',
+          }
+        );
 
       if (error) throw error;
 
       toast.success('Grand Strategy saved');
     } catch (error: any) {
+      console.error('Error saving strategy:', error);
       toast.error('Failed to save strategy');
     } finally {
       setSaving(false);
