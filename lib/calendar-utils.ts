@@ -55,7 +55,7 @@ export function calculateEventPosition(
   const durationMinutes = differenceInMinutes(eventEnd, eventStart);
 
   const top = (minutesFromStart / 60) * hourHeight;
-  const height = Math.max((durationMinutes / 60) * hourHeight, 20);
+  const height = Math.max((durationMinutes / 60) * hourHeight, 60);
 
   return {
     event,

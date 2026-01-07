@@ -67,7 +67,7 @@ export function CalendarEvent({ block, hourHeight, onDragEnd, onResizeEnd, onCli
         }
       } else if (isResizing) {
         const deltaY = e.clientY - dragStartY;
-        const newHeight = Math.max(20, originalHeight + deltaY);
+        const newHeight = Math.max(60, originalHeight + deltaY);
         if (eventRef.current) {
           eventRef.current.style.height = `${newHeight}px`;
         }
@@ -90,7 +90,7 @@ export function CalendarEvent({ block, hourHeight, onDragEnd, onResizeEnd, onCli
         const resizedDistance = Math.abs(deltaY);
 
         if (resizedDistance > 5) {
-          const newHeight = Math.max(20, originalHeight + deltaY);
+          const newHeight = Math.max(60, originalHeight + deltaY);
           const newDurationMinutes = Math.round((newHeight / hourHeight) * 60);
           onResizeEnd(block.event.id, newDurationMinutes);
         }
@@ -118,7 +118,7 @@ export function CalendarEvent({ block, hourHeight, onDragEnd, onResizeEnd, onCli
         height: `${block.height}px`,
         left: `calc(${block.left}% + 4px)`,
         width: `calc(${block.width}% - 8px)`,
-        minHeight: '40px',
+        minHeight: '60px',
         backgroundColor: bgColor,
         borderWidth: '2px',
         borderStyle: 'solid',
@@ -132,10 +132,10 @@ export function CalendarEvent({ block, hourHeight, onDragEnd, onResizeEnd, onCli
         }
       }}
     >
-      <div className="px-2 py-1.5 h-full flex flex-col justify-center">
-        <div className={`${isWeekView ? 'text-xs sm:text-sm md:text-base' : 'text-xs sm:text-sm'} text-white font-bold leading-tight flex items-start gap-1`}>
-          {hasMission && <Target className="w-3 h-3 flex-shrink-0 mt-0.5" />}
-          <span className="line-clamp-2 break-words">{block.event.title}</span>
+      <div className="px-2.5 py-2 h-full flex flex-col justify-center overflow-hidden">
+        <div className={`${isWeekView ? 'text-sm sm:text-base md:text-base' : 'text-sm sm:text-sm'} text-white font-semibold leading-snug flex items-start gap-1.5`}>
+          {hasMission && <Target className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />}
+          <span className="line-clamp-3 break-words leading-tight">{block.event.title}</span>
         </div>
       </div>
       <div
