@@ -336,7 +336,7 @@ export default function WarMapPage() {
                       title={`Color: ${front.color}`}
                     />
                     <Link href={`/dashboard/battlefronts/${front.id}`} className="min-w-0 flex-1">
-                      <h3 className="text-sm md:text-base lg:text-lg xl:text-xl font-bold text-white hover:text-blue-400 transition-colors cursor-pointer line-clamp-2 leading-tight">
+                      <h3 className="text-base md:text-lg lg:text-xl xl:text-2xl font-bold text-white hover:text-blue-400 transition-colors cursor-pointer break-words leading-tight">
                         {front.name}
                       </h3>
                     </Link>
