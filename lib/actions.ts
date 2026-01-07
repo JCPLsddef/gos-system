@@ -415,7 +415,7 @@ export class GosActions {
     try {
       let query = this.supabase
         .from('calendar_events')
-        .select('*, mission:missions(title), battlefront:battlefronts(name)')
+        .select('*, mission:missions!mission_id(title), battlefront:battlefronts!battlefront_id(name)')
         .eq('user_id', this.userId);
 
       if (filters?.startDate) {
