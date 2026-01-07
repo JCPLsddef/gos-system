@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { scheduleNotificationForMission, cancelNotificationForMission } from './notifications';
+import { cancelNotificationForMission } from './notifications';
 import { format, startOfDay } from 'date-fns';
 import { toZonedTime } from 'date-fns-tz';
 
@@ -122,15 +122,8 @@ export async function createMission(userId: string, data: Partial<Mission>): Pro
 
   if (error) throw error;
 
-  if (mission.start_at && !mission.is_recurring) {
-    await scheduleNotificationForMission(
-      userId,
-      mission.id,
-      mission.title,
-      new Date(mission.start_at),
-      mission.battlefront?.name
-    );
-  }
+  // Notification will be created automatically by Edge Function 15 minutes before start
+  // No need to schedule notification here anymore
 
   return mission;
 }
@@ -161,19 +154,10 @@ export async function updateMission(missionId: string, updates: Partial<Mission>
     throw error;
   }
 
-  if (updates.start_at || updates.title || updates.battlefront_id) {
-    const userId = mission.user_id;
+  // Cancel any existing notification if mission details changed
+  // Edge Function will create a new notification 15 minutes before start time
+  if (updates.start_at || updates.title || updates.battlefront_id || updates.completed_at) {
     await cancelNotificationForMission(missionId);
-
-    if (mission.start_at && !mission.completed_at && !mission.is_recurring) {
-      await scheduleNotificationForMission(
-        userId,
-        mission.id,
-        mission.title,
-        new Date(mission.start_at),
-        mission.battlefront?.name
-      );
-    }
   }
 
   return mission;
@@ -238,15 +222,8 @@ export async function uncompleteMission(missionId: string): Promise<Mission> {
     throw error;
   }
 
-  if (mission.start_at && !mission.is_recurring) {
-    await scheduleNotificationForMission(
-      mission.user_id,
-      mission.id,
-      mission.title,
-      new Date(mission.start_at),
-      mission.battlefront?.name
-    );
-  }
+  // Notification will be created automatically by Edge Function 15 minutes before start
+  // No need to schedule notification here anymore
 
   return mission;
 }

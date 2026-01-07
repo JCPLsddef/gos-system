@@ -350,21 +350,21 @@ export default function MasterMissionsPage() {
         <div className="flex items-center gap-3 p-3 bg-slate-800/50 rounded-lg border border-slate-700">
           <span className="text-slate-400 text-sm">Filtered by:</span>
           {battlefrontFilter && (
-            <Badge className="bg-slate-700 text-white flex items-center gap-1">
+            <Badge className="bg-slate-700 text-white flex items-center gap-1 max-w-[200px] md:max-w-xs">
               {battlefrontFilter === 'unassigned' ? (
                 'Unassigned'
               ) : (
                 <>
                   {activeBattlefront && (
                     <div
-                      className="w-2 h-2 rounded-full"
+                      className="w-2 h-2 rounded-full flex-shrink-0"
                       style={{ backgroundColor: getColorHex(activeBattlefront.color) }}
                     />
                   )}
-                  {activeBattlefront?.name || battlefrontFilter}
+                  <span className="truncate">{activeBattlefront?.name || battlefrontFilter}</span>
                 </>
               )}
-              <button onClick={() => setBattlefrontFilter(null)} className="ml-1 hover:text-red-400">
+              <button onClick={() => setBattlefrontFilter(null)} className="ml-1 hover:text-red-400 flex-shrink-0">
                 <X className="w-3 h-3" />
               </button>
             </Badge>

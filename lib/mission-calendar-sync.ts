@@ -1,7 +1,7 @@
 import { supabase } from './supabase';
 import { addMinutes } from 'date-fns';
 import { fromZonedTime, toZonedTime } from 'date-fns-tz';
-import { scheduleNotificationForMission, cancelNotificationForMission } from './notifications';
+import { cancelNotificationForMission } from './notifications';
 
 const TIMEZONE = 'America/Toronto';
 
@@ -57,13 +57,8 @@ export async function syncMissionToCalendar(mission: MissionWithCalendar): Promi
       console.error('Error updating mission with calendar_event_id:', updateError);
     }
 
-    await scheduleNotificationForMission(
-      mission.user_id,
-      mission.id,
-      mission.title,
-      startTime,
-      battlefrontName
-    );
+    // Notification will be created automatically by Edge Function 15 minutes before start
+    // No need to schedule notification here anymore
 
     return event.id;
   }
@@ -86,13 +81,8 @@ export async function syncMissionToCalendar(mission: MissionWithCalendar): Promi
       console.error('Error updating calendar event:', error);
     }
 
-    await scheduleNotificationForMission(
-      mission.user_id,
-      mission.id,
-      mission.title,
-      startTime,
-      battlefrontName
-    );
+    // Notification will be created automatically by Edge Function 15 minutes before start
+    // No need to schedule notification here anymore
 
     return mission.calendar_event_id;
   }

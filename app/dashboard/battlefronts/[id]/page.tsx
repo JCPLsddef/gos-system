@@ -226,18 +226,18 @@ export default function BattlefrontPage() {
                   setName(battlefront.name);
                 }
               }}
-              className="text-4xl font-bold bg-slate-800 border-slate-600 text-white"
+              className="text-xl md:text-2xl lg:text-4xl font-bold bg-slate-800 border-slate-600 text-white"
               autoFocus
             />
           ) : (
             <h1
               onClick={() => setEditingName(true)}
-              className="text-4xl font-bold text-white cursor-pointer hover:text-blue-400 transition-colors"
+              className="text-xl md:text-2xl lg:text-4xl font-bold text-white cursor-pointer hover:text-blue-400 transition-colors truncate"
             >
               BATTLEFRONT: {battlefront.name}
             </h1>
           )}
-          <p className="text-slate-400 text-lg mt-1">Strategy, checkpoints & missions</p>
+          <p className="text-slate-400 text-sm md:text-base lg:text-lg mt-1">Strategy, checkpoints & missions</p>
         </div>
       </div>
 
