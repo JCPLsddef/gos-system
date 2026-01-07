@@ -32,12 +32,12 @@ export default function CalendarPage() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
-          <CalendarIcon className="w-8 h-8 text-blue-400" />
+          <CalendarIcon className="w-6 h-6 md:w-8 md:h-8 text-blue-400" />
           <div>
-            <h1 className="text-4xl font-bold text-white">CALENDAR</h1>
-            <p className="text-slate-400 text-lg mt-1">Schedule & time blocks (EST)</p>
+            <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold text-white">CALENDAR</h1>
+            <p className="text-slate-400 text-sm md:text-base lg:text-lg mt-1">Schedule & time blocks (EST)</p>
           </div>
         </div>
 

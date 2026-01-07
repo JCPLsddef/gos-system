@@ -216,20 +216,20 @@ export function WeekView({ userId, currentWeekStart, onWeekChange }: WeekViewPro
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
             size="icon"
             onClick={() => onWeekChange(new Date(currentWeekStart.getTime() - 7 * 24 * 60 * 60 * 1000))}
-            className="bg-slate-800 border-slate-600 hover:bg-slate-700"
+            className="bg-slate-800 border-slate-600 hover:bg-slate-700 h-8 w-8 md:h-10 md:w-10"
           >
-            <ChevronLeft className="w-4 h-4" />
+            <ChevronLeft className="w-3 h-3 md:w-4 md:h-4" />
           </Button>
           <Button
             variant="outline"
             onClick={() => onWeekChange(new Date())}
-            className="bg-slate-800 border-slate-600 hover:bg-slate-700 text-white"
+            className="bg-slate-800 border-slate-600 hover:bg-slate-700 text-white text-xs md:text-sm px-3 md:px-4 h-8 md:h-10"
           >
             Today
           </Button>
@@ -237,23 +237,23 @@ export function WeekView({ userId, currentWeekStart, onWeekChange }: WeekViewPro
             variant="outline"
             size="icon"
             onClick={() => onWeekChange(new Date(currentWeekStart.getTime() + 7 * 24 * 60 * 60 * 1000))}
-            className="bg-slate-800 border-slate-600 hover:bg-slate-700"
+            className="bg-slate-800 border-slate-600 hover:bg-slate-700 h-8 w-8 md:h-10 md:w-10"
           >
-            <ChevronRight className="w-4 h-4" />
+            <ChevronRight className="w-3 h-3 md:w-4 md:h-4" />
           </Button>
         </div>
-        <h2 className="text-2xl font-bold text-white">
+        <h2 className="text-base sm:text-lg md:text-xl lg:text-2xl font-bold text-white">
           {format(weekDays[0], 'MMM d')} - {format(weekDays[6], 'MMM d, yyyy')}
         </h2>
       </div>
 
       <div className="flex">
-        <div className="w-16 flex-shrink-0" />
+        <div className="w-12 md:w-16 flex-shrink-0" />
         <div className="flex-1 grid grid-cols-7 gap-px bg-slate-700">
           {weekDays.map((day) => (
-            <div key={day.toISOString()} className="bg-slate-900 p-2 text-center">
-              <div className="text-xs text-slate-400 uppercase">{format(day, 'EEE')}</div>
-              <div className="text-xl font-bold text-white mt-1">{format(day, 'd')}</div>
+            <div key={day.toISOString()} className="bg-slate-900 p-1 md:p-2 text-center">
+              <div className="text-[10px] sm:text-xs text-slate-400 uppercase">{format(day, 'EEE')}</div>
+              <div className="text-sm sm:text-base md:text-xl font-bold text-white mt-0.5 md:mt-1">{format(day, 'd')}</div>
             </div>
           ))}
         </div>
@@ -266,7 +266,7 @@ export function WeekView({ userId, currentWeekStart, onWeekChange }: WeekViewPro
           <div ref={containerRef} className="relative overflow-auto max-h-[600px]">
             <TimeGrid hours={hours} hourHeight={HOUR_HEIGHT} weekDays={weekDays} onGridClick={handleCreateEvent} />
 
-            <div className="absolute top-0 left-16 right-0 pointer-events-none">
+            <div className="absolute top-0 left-12 md:left-16 right-0 pointer-events-none">
               <div className="grid grid-cols-7 h-full">
                 {weekDays.map((day, dayIndex) => {
                   const dayEvents = positionEventsForDay(events, day, START_HOUR, HOUR_HEIGHT);

@@ -18,11 +18,11 @@ export function TimeGrid({ hours, hourHeight, weekDays, onGridClick }: TimeGridP
   return (
     <div className="relative flex">
       {/* Time labels column */}
-      <div className="w-16 flex-shrink-0 bg-slate-900/30 border-r border-slate-700">
+      <div className="w-12 md:w-16 flex-shrink-0 bg-slate-900/30 border-r border-slate-700">
         {hours.map((hour) => (
           <div
             key={hour}
-            className="border-b border-slate-700/50 text-xs text-slate-400 pr-2 text-right flex items-start pt-1"
+            className="border-b border-slate-700/50 text-[10px] sm:text-xs text-slate-400 pr-1 md:pr-2 text-right flex items-start pt-1"
             style={{ height: `${hourHeight}px` }}
           >
             {formatTimeLabel(hour)}

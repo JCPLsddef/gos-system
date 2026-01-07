@@ -132,10 +132,10 @@ export function CalendarEvent({ block, hourHeight, onDragEnd, onResizeEnd, onCli
         }
       }}
     >
-      <div className="px-3 py-2 h-full flex flex-col justify-center">
-        <div className={`${isWeekView ? 'text-base' : 'text-sm'} text-white font-bold leading-tight flex items-center gap-1`}>
-          {hasMission && <Target className="w-3 h-3 flex-shrink-0" />}
-          <span className="truncate">{block.event.title}</span>
+      <div className="px-2 py-1.5 h-full flex flex-col justify-center">
+        <div className={`${isWeekView ? 'text-xs sm:text-sm md:text-base' : 'text-xs sm:text-sm'} text-white font-bold leading-tight flex items-start gap-1`}>
+          {hasMission && <Target className="w-3 h-3 flex-shrink-0 mt-0.5" />}
+          <span className="line-clamp-2 break-words">{block.event.title}</span>
         </div>
       </div>
       <div
