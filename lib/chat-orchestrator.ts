@@ -25,7 +25,7 @@ export class ChatOrchestrator {
     try {
       const [battlefrontsRes, missionsRes, statsRes] = await Promise.all([
         this.actions.getBattlefronts(),
-        this.actions.getMissions({ status: 'NOT_DONE' }),
+        this.actions.getMissions({ completed: false }),
         this.actions.getSystemStats(),
       ]);
 

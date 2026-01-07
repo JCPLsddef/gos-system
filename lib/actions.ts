@@ -217,24 +217,34 @@ export class GosActions {
   }
 
   async createMission(data: {
-    battlefrontId: string;
+    battlefrontId?: string;
     title: string;
-    attackDate: string;
-    dueDate: string;
-    durationMinutes: number;
+    startAt?: string;
+    dueDate?: string;
+    durationMinutes?: number;
   }): Promise<ActionResult> {
     try {
+      const insertData: any = {
+        user_id: this.userId,
+        title: data.title,
+        duration_minutes: data.durationMinutes || 60,
+      };
+
+      if (data.battlefrontId) {
+        insertData.battlefront_id = data.battlefrontId;
+      }
+
+      if (data.startAt) {
+        insertData.start_at = data.startAt;
+      }
+
+      if (data.dueDate) {
+        insertData.due_date = data.dueDate;
+      }
+
       const { data: mission, error } = await this.supabase
         .from('missions')
-        .insert({
-          battlefront_id: data.battlefrontId,
-          user_id: this.userId,
-          title: data.title,
-          attack_date: data.attackDate,
-          due_date: data.dueDate,
-          duration_minutes: data.durationMinutes,
-          status: 'NOT_DONE',
-        })
+        .insert(insertData)
         .select()
         .single();
 
@@ -250,19 +260,19 @@ export class GosActions {
     missionId: string,
     data: {
       title?: string;
-      attackDate?: string;
+      startAt?: string;
       dueDate?: string;
       durationMinutes?: number;
-      status?: 'DONE' | 'NOT_DONE';
+      completedAt?: string | null;
     }
   ): Promise<ActionResult> {
     try {
       const updateData: any = {};
-      if (data.title) updateData.title = data.title;
-      if (data.attackDate) updateData.attack_date = data.attackDate;
-      if (data.dueDate) updateData.due_date = data.dueDate;
-      if (data.durationMinutes) updateData.duration_minutes = data.durationMinutes;
-      if (data.status) updateData.status = data.status;
+      if (data.title !== undefined) updateData.title = data.title;
+      if (data.startAt !== undefined) updateData.start_at = data.startAt;
+      if (data.dueDate !== undefined) updateData.due_date = data.dueDate;
+      if (data.durationMinutes !== undefined) updateData.duration_minutes = data.durationMinutes;
+      if (data.completedAt !== undefined) updateData.completed_at = data.completedAt;
 
       const { data: mission, error } = await this.supabase
         .from('missions')
@@ -281,7 +291,9 @@ export class GosActions {
   }
 
   async markMissionDone(missionId: string, done: boolean = true): Promise<ActionResult> {
-    return this.updateMission(missionId, { status: done ? 'DONE' : 'NOT_DONE' });
+    return this.updateMission(missionId, {
+      completedAt: done ? new Date().toISOString() : null
+    });
   }
 
   async deleteMission(missionId: string): Promise<ActionResult> {
@@ -300,7 +312,7 @@ export class GosActions {
     }
   }
 
-  async getMissions(filters?: { battlefrontId?: string; status?: string }): Promise<ActionResult> {
+  async getMissions(filters?: { battlefrontId?: string; completed?: boolean }): Promise<ActionResult> {
     try {
       let query = this.supabase
         .from('missions')
@@ -311,11 +323,15 @@ export class GosActions {
         query = query.eq('battlefront_id', filters.battlefrontId);
       }
 
-      if (filters?.status) {
-        query = query.eq('status', filters.status);
+      if (filters?.completed !== undefined) {
+        if (filters.completed) {
+          query = query.not('completed_at', 'is', null);
+        } else {
+          query = query.is('completed_at', null);
+        }
       }
 
-      const { data: missions, error } = await query.order('attack_date', { ascending: true });
+      const { data: missions, error } = await query.order('created_at', { ascending: false });
 
       if (error) throw error;
 
@@ -513,8 +529,8 @@ export class GosActions {
         },
         missions: {
           total: missions.length,
-          done: missions.filter((m: any) => m.status === 'DONE').length,
-          notDone: missions.filter((m: any) => m.status === 'NOT_DONE').length,
+          done: missions.filter((m: any) => m.completed_at !== null).length,
+          notDone: missions.filter((m: any) => m.completed_at === null).length,
           scheduled: missions.filter((m: any) =>
             events.some((e: any) => e.mission_id === m.id)
           ).length,
@@ -563,7 +579,6 @@ export class GosActions {
         const missionData: any = {
           user_id: this.userId,
           title: mission.title,
-          status: 'NOT_DONE',
           duration_minutes: mission.durationMinutes || 60,
         };
 
@@ -625,7 +640,6 @@ export class GosActions {
           user_id: this.userId,
           battlefront_id: battlefront.id,
           title: mission.title,
-          status: 'NOT_DONE',
           duration_minutes: mission.durationMinutes || 60,
         };
 

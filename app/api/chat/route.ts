@@ -307,7 +307,6 @@ async function executeAllSuggestions(
     const missionData: any = {
       user_id: userId,
       title: mission.title,
-      status: 'NOT_DONE',
       duration_minutes: mission.duration || 60,
     };
 
@@ -401,7 +400,6 @@ async function executeSuggestions(
       const missionData: any = {
         user_id: userId,
         title: item.title,
-        status: 'NOT_DONE',
         duration_minutes: item.duration || 60,
       };
 
