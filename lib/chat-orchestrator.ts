@@ -244,7 +244,7 @@ export class ChatOrchestrator {
         const missionResult = await this.actions.createMission({
           battlefrontId: battlefront.id,
           title: mission.title,
-          attackDate: mission.attackDate.toISOString(),
+          startAt: mission.startAt.toISOString(),
           dueDate: mission.dueDate.toISOString(),
           durationMinutes: mission.duration,
         });
@@ -282,7 +282,7 @@ Battlefront operational. Check War Map.`,
     battlefrontName: string,
     binaryExit: string,
     timeHorizon: string
-  ): Array<{ title: string; attackDate: Date; dueDate: Date; duration: number; checkpoints: string[] }> {
+  ): Array<{ title: string; startAt: Date; dueDate: Date; duration: number; checkpoints: string[] }> {
     const now = new Date();
     const isShortTerm = /short|week|days/i.test(timeHorizon);
     const missions = [];
@@ -292,7 +292,7 @@ Battlefront operational. Check War Map.`,
       week1.setDate(week1.getDate() + 7);
       missions.push({
         title: `Initial planning & research for ${battlefrontName}`,
-        attackDate: new Date(now),
+        startAt: new Date(now),
         dueDate: week1,
         duration: 120,
         checkpoints: [
@@ -306,7 +306,7 @@ Battlefront operational. Check War Map.`,
       week2.setDate(week2.getDate() + 14);
       missions.push({
         title: `Execute first milestone toward ${binaryExit}`,
-        attackDate: week1,
+        startAt: week1,
         dueDate: week2,
         duration: 180,
         checkpoints: [
@@ -320,7 +320,7 @@ Battlefront operational. Check War Map.`,
       week3.setDate(week3.getDate() + 21);
       missions.push({
         title: `Iterate and refine approach`,
-        attackDate: week2,
+        startAt: week2,
         dueDate: week3,
         duration: 120,
         checkpoints: [
@@ -334,7 +334,7 @@ Battlefront operational. Check War Map.`,
       month1.setMonth(month1.getMonth() + 1);
       missions.push({
         title: `Foundation phase: ${battlefrontName}`,
-        attackDate: new Date(now),
+        startAt: new Date(now),
         dueDate: month1,
         duration: 240,
         checkpoints: [
@@ -348,7 +348,7 @@ Battlefront operational. Check War Map.`,
       month2.setMonth(month2.getMonth() + 2);
       missions.push({
         title: `Growth phase: advance toward ${binaryExit}`,
-        attackDate: month1,
+        startAt: month1,
         dueDate: month2,
         duration: 300,
         checkpoints: [
@@ -362,7 +362,7 @@ Battlefront operational. Check War Map.`,
       month3.setMonth(month3.getMonth() + 3);
       missions.push({
         title: `Acceleration phase: final push`,
-        attackDate: month2,
+        startAt: month2,
         dueDate: month3,
         duration: 240,
         checkpoints: [
@@ -388,14 +388,14 @@ Battlefront operational. Check War Map.`,
     const title = this.extractTitle(userMessage);
     const durationMinutes = this.extractDuration(userMessage) || 60;
     const dueDate = this.extractDueDate(userMessage);
-    const attackDate = this.extractAttackDate(userMessage);
+    const startAt = this.extractStartAt(userMessage);
 
-    if (title && dueDate && attackDate) {
+    if (title && dueDate && startAt) {
       return this.executeMissionCreation({
         title,
         durationMinutes,
         dueDate,
-        attackDate,
+        startAt,
         battlefronts: battlefrontsResult.data,
         userMessage,
       });
@@ -404,7 +404,7 @@ Battlefront operational. Check War Map.`,
     const missingInfo = [];
     if (!title) missingInfo.push('mission title');
     if (!dueDate) missingInfo.push('due date');
-    if (!attackDate) missingInfo.push('attack date');
+    if (!startAt) missingInfo.push('start date');
 
     setConversationState(this.userId, {
       flow: 'mission_creation',
@@ -413,7 +413,7 @@ Battlefront operational. Check War Map.`,
         title,
         durationMinutes,
         dueDate,
-        attackDate,
+        startAt,
         battlefronts: battlefrontsResult.data,
         missingInfo,
       },
@@ -433,7 +433,7 @@ Battlefront operational. Check War Map.`,
     const title = context.title || this.extractTitle(userMessage);
     const durationMinutes = context.durationMinutes || this.extractDuration(userMessage) || 60;
     const dueDate = context.dueDate || this.extractDueDate(userMessage);
-    const attackDate = context.attackDate || this.extractAttackDate(userMessage) || dueDate;
+    const startAt = context.startAt || this.extractStartAt(userMessage) || dueDate;
 
     if (!title || !dueDate) {
       const missing = [];
@@ -446,7 +446,7 @@ Battlefront operational. Check War Map.`,
       title,
       durationMinutes,
       dueDate,
-      attackDate,
+      startAt,
       battlefronts: context.battlefronts,
       userMessage,
     });
@@ -456,7 +456,7 @@ Battlefront operational. Check War Map.`,
     title: string;
     durationMinutes: number;
     dueDate: Date;
-    attackDate: Date;
+    startAt: Date;
     battlefronts: any[];
     userMessage: string;
   }): Promise<OrchestratorResult> {
@@ -465,7 +465,7 @@ Battlefront operational. Check War Map.`,
     const missionResult = await this.actions.createMission({
       battlefrontId: battlefront.id,
       title: data.title,
-      attackDate: data.attackDate.toISOString(),
+      startAt: data.startAt.toISOString(),
       dueDate: data.dueDate.toISOString(),
       durationMinutes: data.durationMinutes,
     });
@@ -482,7 +482,7 @@ Battlefront operational. Check War Map.`,
       data.userMessage.toLowerCase().includes('today');
 
     if (shouldSchedule) {
-      const startTime = this.extractStartTime(data.userMessage, data.attackDate);
+      const startTime = this.extractStartTime(data.userMessage, data.startAt);
       const endTime = new Date(startTime);
       endTime.setMinutes(endTime.getMinutes() + data.durationMinutes);
 
@@ -923,7 +923,7 @@ What do you need?`;
     return null;
   }
 
-  private extractAttackDate(message: string): Date | null {
+  private extractStartAt(message: string): Date | null {
     const lowerMessage = message.toLowerCase();
     const now = new Date();
 
@@ -938,11 +938,11 @@ What do you need?`;
     return null;
   }
 
-  private extractStartTime(message: string, attackDate: Date): Date {
+  private extractStartTime(message: string, startAt: Date): Date {
     const timeMatch = message.match(/(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i);
 
     if (timeMatch) {
-      const date = new Date(attackDate);
+      const date = new Date(startAt);
       let hours = parseInt(timeMatch[1]);
       const minutes = timeMatch[2] ? parseInt(timeMatch[2]) : 0;
       const period = timeMatch[3].toLowerCase();
@@ -954,7 +954,7 @@ What do you need?`;
       return date;
     }
 
-    const defaultTime = new Date(attackDate);
+    const defaultTime = new Date(startAt);
     defaultTime.setHours(9, 0, 0, 0);
     return defaultTime;
   }
