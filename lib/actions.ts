@@ -523,4 +523,209 @@ export class GosActions {
       return { success: false, error: formatError(error) };
     }
   }
+
+  async createMultipleMissions(
+    missions: Array<{
+      title: string;
+      battlefrontId?: string;
+      dueDate?: string;
+      durationMinutes?: number;
+    }>
+  ): Promise<ActionResult<{ created: number; failed: number; missions: any[] }>> {
+    const results = {
+      created: 0,
+      failed: 0,
+      missions: [] as any[],
+    };
+
+    let defaultBattlefrontId: string | null = null;
+
+    const { data: existingBf } = await this.supabase
+      .from('battlefronts')
+      .select('id')
+      .eq('user_id', this.userId)
+      .eq('status', 'ACTIVE')
+      .limit(1)
+      .maybeSingle();
+
+    if (existingBf) {
+      defaultBattlefrontId = existingBf.id;
+    }
+
+    for (const mission of missions) {
+      try {
+        const missionData: any = {
+          user_id: this.userId,
+          title: mission.title,
+          status: 'NOT_DONE',
+          duration_minutes: mission.durationMinutes || 60,
+        };
+
+        if (mission.battlefrontId || defaultBattlefrontId) {
+          missionData.battlefront_id = mission.battlefrontId || defaultBattlefrontId;
+        }
+
+        if (mission.dueDate) {
+          missionData.due_date = mission.dueDate;
+        }
+
+        const { data, error } = await this.supabase
+          .from('missions')
+          .insert(missionData)
+          .select()
+          .single();
+
+        if (error) {
+          results.failed++;
+        } else {
+          results.created++;
+          results.missions.push(data);
+        }
+      } catch {
+        results.failed++;
+      }
+    }
+
+    return { success: true, data: results };
+  }
+
+  async createBattlefrontWithMissions(data: {
+    battlefrontName: string;
+    binaryExitTarget?: string;
+    missions: Array<{
+      title: string;
+      dueDate?: string;
+      durationMinutes?: number;
+    }>;
+  }): Promise<ActionResult<{ battlefront: any; missions: any[]; missionsCreated: number }>> {
+    try {
+      const { data: battlefront, error: bfError } = await this.supabase
+        .from('battlefronts')
+        .insert({
+          user_id: this.userId,
+          name: data.battlefrontName,
+          binary_exit_target: data.binaryExitTarget || '',
+          status: 'ACTIVE',
+        })
+        .select()
+        .single();
+
+      if (bfError) throw bfError;
+
+      const createdMissions: any[] = [];
+
+      for (const mission of data.missions) {
+        const missionData: any = {
+          user_id: this.userId,
+          battlefront_id: battlefront.id,
+          title: mission.title,
+          status: 'NOT_DONE',
+          duration_minutes: mission.durationMinutes || 60,
+        };
+
+        if (mission.dueDate) {
+          missionData.due_date = mission.dueDate;
+        }
+
+        const { data: missionRecord, error: mError } = await this.supabase
+          .from('missions')
+          .insert(missionData)
+          .select()
+          .single();
+
+        if (!mError && missionRecord) {
+          createdMissions.push(missionRecord);
+        }
+      }
+
+      return {
+        success: true,
+        data: {
+          battlefront,
+          missions: createdMissions,
+          missionsCreated: createdMissions.length,
+        },
+      };
+    } catch (error: any) {
+      return { success: false, error: formatError(error) };
+    }
+  }
+
+  async scheduleMultipleEvents(
+    events: Array<{
+      title: string;
+      startTime: string;
+      endTime: string;
+      missionId?: string;
+      battlefrontId?: string;
+    }>
+  ): Promise<ActionResult<{ created: number; failed: number; events: any[] }>> {
+    const results = {
+      created: 0,
+      failed: 0,
+      events: [] as any[],
+    };
+
+    for (const event of events) {
+      try {
+        const { data, error } = await this.supabase
+          .from('calendar_events')
+          .insert({
+            user_id: this.userId,
+            title: event.title,
+            start_time: event.startTime,
+            end_time: event.endTime,
+            mission_id: event.missionId || null,
+            battlefront_id: event.battlefrontId || null,
+            locked: false,
+          })
+          .select()
+          .single();
+
+        if (error) {
+          results.failed++;
+        } else {
+          results.created++;
+          results.events.push(data);
+        }
+      } catch {
+        results.failed++;
+      }
+    }
+
+    return { success: true, data: results };
+  }
+
+  async getOrCreateDefaultBattlefront(): Promise<ActionResult> {
+    try {
+      const { data: existingBf } = await this.supabase
+        .from('battlefronts')
+        .select('*')
+        .eq('user_id', this.userId)
+        .eq('status', 'ACTIVE')
+        .limit(1)
+        .maybeSingle();
+
+      if (existingBf) {
+        return { success: true, data: existingBf };
+      }
+
+      const { data: newBf, error } = await this.supabase
+        .from('battlefronts')
+        .insert({
+          user_id: this.userId,
+          name: 'General Tasks',
+          binary_exit_target: 'Complete all imported tasks',
+          status: 'ACTIVE',
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      return { success: true, data: newBf };
+    } catch (error: any) {
+      return { success: false, error: formatError(error) };
+    }
+  }
 }
