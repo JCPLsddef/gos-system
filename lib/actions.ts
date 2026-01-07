@@ -304,7 +304,7 @@ export class GosActions {
     try {
       let query = this.supabase
         .from('missions')
-        .select('*, battlefront:battlefronts!inner(id, name)')
+        .select('*, battlefront:battlefronts(id, name)')
         .eq('user_id', this.userId);
 
       if (filters?.battlefrontId) {
@@ -490,8 +490,14 @@ export class GosActions {
         this.getCalendarEvents(),
       ]);
 
-      if (!battlefrontsRes.success || !missionsRes.success || !eventsRes.success) {
-        throw new Error('Failed to fetch system stats');
+      if (!battlefrontsRes.success) {
+        throw new Error(`Failed to fetch battlefronts: ${battlefrontsRes.error}`);
+      }
+      if (!missionsRes.success) {
+        throw new Error(`Failed to fetch missions: ${missionsRes.error}`);
+      }
+      if (!eventsRes.success) {
+        throw new Error(`Failed to fetch events: ${eventsRes.error}`);
       }
 
       const battlefronts = battlefrontsRes.data || [];
