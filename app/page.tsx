@@ -1,16 +1,20 @@
 import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 import { createServerClient } from '@supabase/ssr';
+import { isPreviewMode, logCurrentMode } from '@/lib/preview-mode';
 
 export default async function Home() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  // PREVIEW-SAFE: If env vars missing, redirect to login to show UI
-  // Production always has these vars, so this only affects preview environments
-  if (!supabaseUrl || !supabaseAnonKey) {
-    redirect('/login');
+  // PREVIEW MODE: Rediriger directement vers dashboard pour afficher l'UI
+  // Le mock user dans auth-context + le bypass middleware permettent l'accès
+  if (isPreviewMode()) {
+    logCurrentMode('RootPage');
+    console.log('🎨 Preview Mode - Redirect vers /dashboard/warmap');
+    redirect('/dashboard/warmap');
   }
+
+  // PRODUCTION MODE: Auth check normale
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
   // Server-side auth check using cookies
   const cookieStore = cookies();

@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase, getSupabaseOrNull } from './supabase';
 import { useRouter } from 'next/navigation';
+import { isPreviewMode, PREVIEW_MOCK_USER, PREVIEW_MOCK_SESSION, logCurrentMode } from './preview-mode';
 
 interface AuthContextType {
   user: User | null;
@@ -23,7 +24,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
-    // PREVIEW-SAFE: If Supabase is not available (missing env vars), skip auth
+    // PREVIEW MODE: Mock user pour afficher l'UI comme si connecté
+    if (isPreviewMode()) {
+      logCurrentMode('AuthContext');
+      console.log('🎨 Preview Mode - Mock user activé');
+      setUser(PREVIEW_MOCK_USER as any);
+      setSession(PREVIEW_MOCK_SESSION as any);
+      setLoading(false);
+      return;
+    }
+
+    // PRODUCTION MODE: Auth réelle via Supabase
     if (!getSupabaseOrNull()) {
       setLoading(false);
       return;
@@ -49,7 +60,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    // PREVIEW-SAFE: Return error if Supabase not available
+    // PREVIEW MODE: Refuser la connexion (pas de vraie auth)
+    if (isPreviewMode()) {
+      return {
+        error: new Error('Preview Mode: Authentication disabled - UI preview only')
+      };
+    }
+
+    // PRODUCTION MODE: Auth réelle
     if (!getSupabaseOrNull()) {
       return { error: new Error('Supabase not configured') };
     }
@@ -77,7 +95,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signUp = async (email: string, password: string) => {
-    // PREVIEW-SAFE: Return error if Supabase not available
+    // PREVIEW MODE: Refuser l'inscription
+    if (isPreviewMode()) {
+      return {
+        error: new Error('Preview Mode: Registration disabled - UI preview only')
+      };
+    }
+
+    // PRODUCTION MODE: Auth réelle
     if (!getSupabaseOrNull()) {
       return { error: new Error('Supabase not configured') };
     }
@@ -117,7 +142,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
-    // PREVIEW-SAFE: Skip if Supabase not available
+    // PREVIEW MODE: Pas de déconnexion (pas de vraie session)
+    if (isPreviewMode()) {
+      return;
+    }
+
+    // PRODUCTION MODE: Déconnexion réelle
     if (!getSupabaseOrNull()) return;
 
     await supabase.auth.signOut();

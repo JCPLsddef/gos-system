@@ -1,6 +1,7 @@
 // middleware.ts
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
+import { isPreviewMode, logCurrentMode } from "@/lib/preview-mode";
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({
@@ -9,16 +10,17 @@ export async function middleware(request: NextRequest) {
     },
   });
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  // PREVIEW-SAFE: If env vars missing, skip auth check (allow access)
-  // This allows UI to render in preview environments (Bolt.new, etc.)
-  // Production always has these vars, so auth always works in production
-  if (!supabaseUrl || !supabaseAnonKey) {
-    console.warn('⚠️ Middleware: Supabase env vars missing - skipping auth check (preview mode)');
-    return response;
+  // PREVIEW MODE: Bypass auth complètement pour permettre la navigation UI
+  // En production, ce code n'est jamais exécuté car les env vars sont toujours présentes
+  if (isPreviewMode()) {
+    logCurrentMode('Middleware');
+    console.log('✅ Preview Mode - Accès autorisé sans auth:', request.nextUrl.pathname);
+    return response; // Autoriser l'accès à toutes les routes
   }
+
+  // PRODUCTION MODE: Auth stricte via Supabase
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
   // Log ALL cookies FIRST
   const allCookies = request.cookies.getAll();
@@ -139,7 +141,8 @@ export async function middleware(request: NextRequest) {
   return response;
 }
 
-// ✅ IMPORTANT: matcher hyper strict → ne touche JAMAIS /manifest.json, /_next, etc.
+// Protège uniquement /dashboard/* en production
+// En preview mode, le bypass ci-dessus autorise l'accès même sans auth
 export const config = {
   matcher: ["/dashboard/:path*"],
 };
