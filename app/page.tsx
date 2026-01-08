@@ -1,26 +1,41 @@
-'use client';
+import { redirect } from 'next/navigation';
+import { cookies } from 'next/headers';
+import { createServerClient } from '@supabase/ssr';
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { useAuth } from '@/lib/auth-context';
+export default async function Home() {
+  // Server-side auth check using cookies
+  const cookieStore = cookies();
 
-export default function Home() {
-  const router = useRouter();
-  const { user, loading } = useAuth();
-
-  useEffect(() => {
-    if (!loading) {
-      if (user) {
-        router.push('/dashboard');
-      } else {
-        router.push('/login');
-      }
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) => {
+              cookieStore.set(name, value, options);
+            });
+          } catch {
+            // The `setAll` method is called from Server Components which do not support modifying cookies
+          }
+        },
+      },
     }
-  }, [user, loading, router]);
-
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-black via-slate-900 to-blue-950">
-      <div className="text-white text-xl">Loading...</div>
-    </div>
   );
+
+  // Check authentication server-side
+  const { data: { session } } = await supabase.auth.getSession();
+
+  // Deterministic redirect based on auth state
+  if (session) {
+    // Authenticated: go directly to war map (skip intermediate /dashboard)
+    redirect('/dashboard/warmap');
+  } else {
+    // Not authenticated: go to login
+    redirect('/login');
+  }
 }
