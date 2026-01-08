@@ -9,15 +9,26 @@ export async function middleware(request: NextRequest) {
     },
   });
 
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  // PREVIEW-SAFE: If env vars missing, skip auth check (allow access)
+  // This allows UI to render in preview environments (Bolt.new, etc.)
+  // Production always has these vars, so auth always works in production
+  if (!supabaseUrl || !supabaseAnonKey) {
+    console.warn('⚠️ Middleware: Supabase env vars missing - skipping auth check (preview mode)');
+    return response;
+  }
+
   // Log ALL cookies FIRST
   const allCookies = request.cookies.getAll();
   const cookieNames = allCookies.map(c => c.name);
-  const supabaseCookies = allCookies.filter(c => 
-    c.name.includes('supabase') || 
+  const supabaseCookies = allCookies.filter(c =>
+    c.name.includes('supabase') ||
     c.name.includes('sb-') ||
     c.name.includes('auth')
   );
-  
+
   console.log('🛡️ Middleware INITIAL check:', {
     path: request.nextUrl.pathname,
     allCookiesCount: allCookies.length,
@@ -27,8 +38,8 @@ export async function middleware(request: NextRequest) {
   });
 
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    supabaseUrl,
+    supabaseAnonKey,
     {
       cookies: {
         get(name: string) {

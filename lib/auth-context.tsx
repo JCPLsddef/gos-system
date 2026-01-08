@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
-import { supabase } from './supabase';
+import { supabase, getSupabaseOrNull } from './supabase';
 import { useRouter } from 'next/navigation';
 
 interface AuthContextType {
@@ -23,6 +23,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
+    // PREVIEW-SAFE: If Supabase is not available (missing env vars), skip auth
+    if (!getSupabaseOrNull()) {
+      setLoading(false);
+      return;
+    }
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
@@ -43,6 +49,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signIn = async (email: string, password: string) => {
+    // PREVIEW-SAFE: Return error if Supabase not available
+    if (!getSupabaseOrNull()) {
+      return { error: new Error('Supabase not configured') };
+    }
+
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
@@ -66,6 +77,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signUp = async (email: string, password: string) => {
+    // PREVIEW-SAFE: Return error if Supabase not available
+    if (!getSupabaseOrNull()) {
+      return { error: new Error('Supabase not configured') };
+    }
+
     const { error } = await supabase.auth.signUp({
       email,
       password,
@@ -101,6 +117,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
+    // PREVIEW-SAFE: Skip if Supabase not available
+    if (!getSupabaseOrNull()) return;
+
     await supabase.auth.signOut();
     router.push('/');
   };
