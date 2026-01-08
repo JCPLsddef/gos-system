@@ -38,10 +38,17 @@ export async function middleware(request: NextRequest) {
         },
         set(name: string, value: string, options: CookieOptions) {
           console.log(`🍪 Cookie SET: ${name}`);
+          // Enhanced cookie options for mobile compatibility
+          const enhancedOptions = {
+            ...options,
+            sameSite: 'lax' as const, // More permissive for mobile
+            secure: process.env.NODE_ENV === 'production', // HTTPS only in production
+            path: '/', // Ensure cookies are available across the whole site
+          };
           request.cookies.set({
             name,
             value,
-            ...options,
+            ...enhancedOptions,
           });
           response = NextResponse.next({
             request: {
@@ -51,15 +58,19 @@ export async function middleware(request: NextRequest) {
           response.cookies.set({
             name,
             value,
-            ...options,
+            ...enhancedOptions,
           });
         },
         remove(name: string, options: CookieOptions) {
           console.log(`🍪 Cookie REMOVE: ${name}`);
+          const enhancedOptions = {
+            ...options,
+            path: '/',
+          };
           request.cookies.set({
             name,
             value: "",
-            ...options,
+            ...enhancedOptions,
           });
           response = NextResponse.next({
             request: {
@@ -69,23 +80,46 @@ export async function middleware(request: NextRequest) {
           response.cookies.set({
             name,
             value: "",
-            ...options,
+            ...enhancedOptions,
           });
         },
       },
     }
   );
 
-  const { data } = await supabase.auth.getUser();
+  // Try getUser first, fallback to getSession for mobile compatibility
+  let user = null;
 
-  console.log('🛡️ Middleware AFTER getUser:', {
-    path: request.nextUrl.pathname,
-    hasUser: !!data?.user,
-    userId: data?.user?.id,
-  });
+  try {
+    const { data, error } = await supabase.auth.getUser();
 
-  if (!data?.user) {
-    console.log('❌ No user found, redirecting to /login');
+    console.log('🛡️ Middleware AFTER getUser:', {
+      path: request.nextUrl.pathname,
+      hasUser: !!data?.user,
+      userId: data?.user?.id,
+      error: error?.message,
+    });
+
+    user = data?.user;
+
+    // If getUser fails, try getSession as fallback (better for mobile)
+    if (!user && !error) {
+      console.log('🔄 getUser returned null, trying getSession fallback...');
+      const { data: sessionData } = await supabase.auth.getSession();
+      user = sessionData?.session?.user ?? null;
+
+      console.log('🛡️ Middleware AFTER getSession fallback:', {
+        hasUser: !!user,
+        userId: user?.id,
+      });
+    }
+  } catch (err) {
+    console.error('❌ Auth error in middleware:', err);
+    user = null;
+  }
+
+  if (!user) {
+    console.log('❌ No user found after all attempts, redirecting to /login');
     const loginUrl = new URL("/login", request.url);
     return NextResponse.redirect(loginUrl);
   }

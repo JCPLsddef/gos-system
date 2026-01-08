@@ -132,10 +132,10 @@ export function CalendarEvent({ block, hourHeight, onDragEnd, onResizeEnd, onCli
         }
       }}
     >
-      <div className="px-1 sm:px-2 md:px-3 py-2 h-full flex flex-col justify-center overflow-visible">
-        <div className={`${isWeekView ? 'text-xs sm:text-sm md:text-base lg:text-lg' : 'text-base sm:text-base'} text-white font-extrabold leading-none flex items-start gap-1`}>
-          {hasMission && <Target className="w-3 h-3 md:w-4 md:h-4 flex-shrink-0 mt-0.5" />}
-          <span className="break-all hyphens-auto" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>{block.event.title}</span>
+      <div className="px-1 sm:px-2 md:px-3 py-2 h-full flex flex-col justify-center overflow-hidden">
+        <div className={`${isWeekView ? 'text-sm md:text-base' : 'text-base'} text-white font-bold leading-tight flex items-start gap-1.5`}>
+          {hasMission && <Target className="w-3.5 h-3.5 md:w-4 md:h-4 flex-shrink-0 mt-0.5" />}
+          <span className="break-words line-clamp-3">{block.event.title}</span>
         </div>
       </div>
       <div
