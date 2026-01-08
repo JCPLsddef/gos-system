@@ -22,6 +22,8 @@ import { CurrentTimeLine } from './current-time-line';
 import { supabase } from '@/lib/supabase';
 import { startOfDay, endOfDay } from 'date-fns';
 import { updateMissionFromCalendarEvent } from '@/lib/mission-calendar-sync';
+import { isPreviewMode } from '@/lib/preview-mode';
+import { mockCalendarEvents } from '@/lib/mockData';
 
 const HOUR_HEIGHT = 80;
 const START_HOUR = 4;
@@ -52,6 +54,19 @@ export function WeekView({ userId, currentWeekStart, onWeekChange }: WeekViewPro
 
   const loadEvents = async () => {
     setLoading(true);
+
+    // PREVIEW MODE: Use mock data for visual validation
+    if (isPreviewMode()) {
+      const eventsWithColor = mockCalendarEvents.map((e: any) => ({
+        ...e,
+        color: e.mission_id ? 'blue' : null,
+      }));
+      setEvents(eventsWithColor);
+      setLoading(false);
+      return;
+    }
+
+    // PRODUCTION: Real Supabase queries
     try {
       const weekStart = startOfDay(weekDays[0]);
       const weekEnd = endOfDay(weekDays[6]);

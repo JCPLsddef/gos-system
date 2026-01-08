@@ -16,6 +16,8 @@ import Link from 'next/link';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { ColorPicker } from '@/components/color-picker';
 import { getColorHex } from '@/lib/color-mapping';
+import { isPreviewMode } from '@/lib/preview-mode';
+import { mockBattlefronts } from '@/lib/mockData';
 
 type Battlefront = {
   id: string;
@@ -56,6 +58,22 @@ export default function WarMapPage() {
   const loadBattlefronts = async () => {
     if (!user) return;
 
+    // PREVIEW MODE: Use mock data for visual validation
+    if (isPreviewMode()) {
+      const frontsWithProgress = mockBattlefronts.map((front) => ({
+        ...front,
+        color: 'blue',
+        checkpointsDone: Math.floor(Math.random() * 10),
+        checkpointsTotal: 10,
+        missionsDone: Math.floor(Math.random() * 8),
+        missionsTotal: 8,
+      }));
+      setBattlefronts(frontsWithProgress as any);
+      setLoading(false);
+      return;
+    }
+
+    // PRODUCTION: Real Supabase queries
     try {
       const { data: fronts, error } = await supabase
         .from('battlefronts')

@@ -28,6 +28,8 @@ import {
   type Mission,
 } from '@/lib/missions-service';
 import { syncMissionToCalendar, deleteMissionCalendarEvent } from '@/lib/mission-calendar-sync';
+import { isPreviewMode } from '@/lib/preview-mode';
+import { mockMissions, mockBattlefronts } from '@/lib/mockData';
 
 type Battlefront = {
   id: string;
@@ -73,6 +75,16 @@ export default function MasterMissionsPage() {
     if (!user) return;
 
     setLoading(true);
+
+    // PREVIEW MODE: Use mock data for visual validation
+    if (isPreviewMode()) {
+      setMissions(mockMissions as any);
+      setBattlefronts(mockBattlefronts.map(bf => ({ id: bf.id, name: bf.name, color: 'blue' })));
+      setLoading(false);
+      return;
+    }
+
+    // PRODUCTION: Real Supabase queries
     try {
       const [missionsData, battlefrontsData] = await Promise.all([
         getMissions(user.id),
