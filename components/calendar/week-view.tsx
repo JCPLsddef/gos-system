@@ -262,58 +262,60 @@ export function WeekView({ userId, currentWeekStart, onWeekChange }: WeekViewPro
         </h2>
       </div>
 
-      {/* Mobile: horizontally scrollable week header */}
+      {/* Mobile: single shared horizontal scroll container for header + grid */}
       <div className="overflow-x-auto sm:overflow-x-visible scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0">
-        <div className="flex min-w-[840px] sm:min-w-0">
-          <div className="w-12 md:w-16 flex-shrink-0" />
-          <div className="flex-1 grid grid-cols-7 gap-px bg-slate-700">
-            {weekDays.map((day) => (
-              <div key={day.toISOString()} className="bg-slate-900 p-1 md:p-2 text-center min-w-[110px] sm:min-w-0">
-                <div className="text-[10px] sm:text-xs text-slate-400 uppercase">{format(day, 'EEE')}</div>
-                <div className="text-sm sm:text-base md:text-xl font-bold text-white mt-0.5 md:mt-1">{format(day, 'd')}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <Card className="bg-slate-900/50 border-slate-700 overflow-hidden">
-        {loading ? (
-          <div className="flex items-center justify-center h-96 text-white">Loading...</div>
-        ) : (
-          <div className="overflow-x-auto sm:overflow-x-visible scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0">
-            <div ref={containerRef} className="relative overflow-y-auto max-h-[600px] min-w-[840px] sm:min-w-0">
-              <TimeGrid hours={hours} hourHeight={HOUR_HEIGHT} weekDays={weekDays} onGridClick={handleCreateEvent} />
-
-              <div className="absolute top-0 left-12 md:left-16 right-0 pointer-events-none">
-                <div className="grid grid-cols-7 h-full">
-                  {weekDays.map((day, dayIndex) => {
-                    const dayEvents = positionEventsForDay(events, day, START_HOUR, HOUR_HEIGHT);
-
-                    return (
-                      <div key={dayIndex} className="relative pointer-events-none min-w-[110px] sm:min-w-0" style={{ height: `${hours.length * HOUR_HEIGHT}px` }}>
-                        {dayEvents.map((block) => (
-                          <div key={block.event.id} className="pointer-events-auto">
-                            <CalendarEventComponent
-                              block={block}
-                              hourHeight={HOUR_HEIGHT}
-                              onDragEnd={handleDragEnd}
-                              onResizeEnd={handleResizeEnd}
-                              onClick={(id) => setEditingEvent(events.find((e) => e.id === id) || null)}
-                              isWeekView={true}
-                              color={block.event.color}
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    );
-                  })}
+        <div className="min-w-[840px] sm:min-w-0 space-y-4">
+          {/* Week header row */}
+          <div className="flex">
+            <div className="w-12 md:w-16 flex-shrink-0" />
+            <div className="flex-1 grid grid-cols-7 gap-px bg-slate-700">
+              {weekDays.map((day) => (
+                <div key={day.toISOString()} className="bg-slate-900 p-1 md:p-2 text-center min-w-[110px] sm:min-w-0">
+                  <div className="text-[10px] sm:text-xs text-slate-400 uppercase">{format(day, 'EEE')}</div>
+                  <div className="text-sm sm:text-base md:text-xl font-bold text-white mt-0.5 md:mt-1">{format(day, 'd')}</div>
                 </div>
-              </div>
+              ))}
             </div>
           </div>
-        )}
-      </Card>
+
+          {/* Calendar grid */}
+          <Card className="bg-slate-900/50 border-slate-700 overflow-hidden">
+            {loading ? (
+              <div className="flex items-center justify-center h-96 text-white">Loading...</div>
+            ) : (
+              <div ref={containerRef} className="relative overflow-y-auto max-h-[600px]">
+                <TimeGrid hours={hours} hourHeight={HOUR_HEIGHT} weekDays={weekDays} onGridClick={handleCreateEvent} />
+
+                <div className="absolute top-0 left-12 md:left-16 right-0 pointer-events-none">
+                  <div className="grid grid-cols-7 h-full">
+                    {weekDays.map((day, dayIndex) => {
+                      const dayEvents = positionEventsForDay(events, day, START_HOUR, HOUR_HEIGHT);
+
+                      return (
+                        <div key={dayIndex} className="relative pointer-events-none min-w-[110px] sm:min-w-0" style={{ height: `${hours.length * HOUR_HEIGHT}px` }}>
+                          {dayEvents.map((block) => (
+                            <div key={block.event.id} className="pointer-events-auto">
+                              <CalendarEventComponent
+                                block={block}
+                                hourHeight={HOUR_HEIGHT}
+                                onDragEnd={handleDragEnd}
+                                onResizeEnd={handleResizeEnd}
+                                onClick={(id) => setEditingEvent(events.find((e) => e.id === id) || null)}
+                                isWeekView={true}
+                                color={block.event.color}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+          </Card>
+        </div>
+      </div>
 
       <EventEditor
         event={editingEvent}
