@@ -2,6 +2,7 @@
 
 import { TimeBlock } from '@/lib/calendar-utils';
 import { getColorHex } from '@/lib/color-mapping';
+import { MIN_EVENT_HEIGHT_PX, PX_PER_MINUTE } from '@/lib/calendarLayout';
 import { useState, useRef, useEffect } from 'react';
 import { Target } from 'lucide-react';
 
@@ -67,7 +68,7 @@ export function CalendarEvent({ block, hourHeight, onDragEnd, onResizeEnd, onCli
         }
       } else if (isResizing) {
         const deltaY = e.clientY - dragStartY;
-        const newHeight = Math.max(80, originalHeight + deltaY);
+        const newHeight = Math.max(MIN_EVENT_HEIGHT_PX, originalHeight + deltaY);
         if (eventRef.current) {
           eventRef.current.style.height = `${newHeight}px`;
         }
@@ -81,7 +82,7 @@ export function CalendarEvent({ block, hourHeight, onDragEnd, onResizeEnd, onCli
 
         if (movedDistance > 5) {
           const newTop = Math.max(0, originalTop + deltaY);
-          const newStartMinutes = Math.round((newTop / hourHeight) * 60);
+          const newStartMinutes = Math.round(newTop / PX_PER_MINUTE);
           onDragEnd(block.event.id, newStartMinutes);
         }
         setIsDragging(false);
@@ -90,8 +91,8 @@ export function CalendarEvent({ block, hourHeight, onDragEnd, onResizeEnd, onCli
         const resizedDistance = Math.abs(deltaY);
 
         if (resizedDistance > 5) {
-          const newHeight = Math.max(80, originalHeight + deltaY);
-          const newDurationMinutes = Math.round((newHeight / hourHeight) * 60);
+          const newHeight = Math.max(MIN_EVENT_HEIGHT_PX, originalHeight + deltaY);
+          const newDurationMinutes = Math.round(newHeight / PX_PER_MINUTE);
           onResizeEnd(block.event.id, newDurationMinutes);
         }
         setIsResizing(false);
@@ -118,7 +119,7 @@ export function CalendarEvent({ block, hourHeight, onDragEnd, onResizeEnd, onCli
         height: `${block.height}px`,
         left: `calc(${block.left}% + 4px)`,
         width: `calc(${block.width}% - 8px)`,
-        minHeight: '80px',
+        minHeight: `${MIN_EVENT_HEIGHT_PX}px`,
         backgroundColor: bgColor,
         borderWidth: '2px',
         borderStyle: 'solid',
@@ -132,16 +133,16 @@ export function CalendarEvent({ block, hourHeight, onDragEnd, onResizeEnd, onCli
         }
       }}
     >
-      <div className="px-1 sm:px-2 md:px-3 py-1.5 sm:py-2 h-full flex flex-col justify-center overflow-hidden">
+      <div className="px-1 sm:px-2 py-0.5 sm:py-1 h-full flex flex-col justify-center overflow-hidden">
         <div
-          className={`${isWeekView ? 'text-xs sm:text-sm md:text-base' : 'text-base'} text-white font-bold leading-snug flex items-start gap-1`}
+          className={`${isWeekView ? 'text-[10px] sm:text-xs md:text-sm' : 'text-xs sm:text-sm'} text-white font-bold leading-tight flex items-center gap-1`}
           style={{
             textShadow: '0 1px 3px rgba(0, 0, 0, 0.8), 0 1px 2px rgba(0, 0, 0, 0.9)',
             WebkitFontSmoothing: 'antialiased'
           }}
         >
-          {hasMission && <Target className="w-3 h-3 sm:w-3.5 sm:h-3.5 md:w-4 md:h-4 flex-shrink-0 mt-0.5" />}
-          <span className="break-words line-clamp-2 sm:line-clamp-3">{block.event.title}</span>
+          {hasMission && <Target className="w-2.5 h-2.5 sm:w-3 sm:h-3 flex-shrink-0" />}
+          <span className="truncate">{block.event.title}</span>
         </div>
       </div>
       <div

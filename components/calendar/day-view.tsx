@@ -14,6 +14,7 @@ import {
   updateEventTimes,
   snapToGrid,
 } from '@/lib/calendar-utils';
+import { HOUR_HEIGHT_PX, GRID_START_HOUR, GRID_END_HOUR } from '@/lib/calendarLayout';
 import { TimeGrid } from './time-grid';
 import { CalendarEvent as CalendarEventComponent } from './calendar-event';
 import { EventEditor } from './event-editor';
@@ -21,10 +22,6 @@ import { CurrentTimeLine } from './current-time-line';
 import { supabase } from '@/lib/supabase';
 import { startOfDay, endOfDay } from 'date-fns';
 import { updateMissionFromCalendarEvent } from '@/lib/mission-calendar-sync';
-
-const HOUR_HEIGHT = 80;
-const START_HOUR = 4;
-const END_HOUR = 22;
 
 type DayViewProps = {
   userId: string;
@@ -42,7 +39,7 @@ export function DayView({ userId, currentDate, onDateChange }: DayViewProps) {
   const [editingEvent, setEditingEvent] = useState<CalendarEventWithColor | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const hours = getHourSlots(START_HOUR, END_HOUR);
+  const hours = getHourSlots(GRID_START_HOUR, GRID_END_HOUR);
 
   useEffect(() => {
     loadEvents();
@@ -207,7 +204,7 @@ export function DayView({ userId, currentDate, onDateChange }: DayViewProps) {
     }
   };
 
-  const dayEvents = positionEventsForDay(events, currentDate, START_HOUR, HOUR_HEIGHT);
+  const dayEvents = positionEventsForDay(events, currentDate, GRID_START_HOUR, HOUR_HEIGHT_PX);
 
   return (
     <div className="space-y-4">
@@ -245,19 +242,19 @@ export function DayView({ userId, currentDate, onDateChange }: DayViewProps) {
           <div className="flex items-center justify-center h-96 text-white">Loading...</div>
         ) : (
           <div ref={containerRef} className="relative overflow-auto max-h-[600px]">
-            <TimeGrid hours={hours} hourHeight={HOUR_HEIGHT} weekDays={[currentDate]} onGridClick={handleCreateEvent} />
+            <TimeGrid hours={hours} hourHeight={HOUR_HEIGHT_PX} weekDays={[currentDate]} onGridClick={handleCreateEvent} />
 
             <div className="absolute top-0 left-16 right-0 pointer-events-none">
-              <CurrentTimeLine startHour={START_HOUR} hourHeight={HOUR_HEIGHT} />
+              <CurrentTimeLine startHour={GRID_START_HOUR} hourHeight={HOUR_HEIGHT_PX} />
             </div>
 
             <div className="absolute top-0 left-16 right-0 pointer-events-none">
-              <div className="relative pointer-events-none" style={{ height: `${hours.length * HOUR_HEIGHT}px` }}>
+              <div className="relative pointer-events-none" style={{ height: `${hours.length * HOUR_HEIGHT_PX}px` }}>
                 {dayEvents.map((block) => (
                   <div key={block.event.id} className="pointer-events-auto">
                     <CalendarEventComponent
                       block={block}
-                      hourHeight={HOUR_HEIGHT}
+                      hourHeight={HOUR_HEIGHT_PX}
                       onDragEnd={handleDragEnd}
                       onResizeEnd={handleResizeEnd}
                       onClick={(id) => setEditingEvent(events.find((e) => e.id === id) || null)}

@@ -15,6 +15,7 @@ import {
   updateEventTimes,
   snapToGrid,
 } from '@/lib/calendar-utils';
+import { HOUR_HEIGHT_PX, GRID_START_HOUR, GRID_END_HOUR } from '@/lib/calendarLayout';
 import { TimeGrid } from './time-grid';
 import { CalendarEvent as CalendarEventComponent } from './calendar-event';
 import { EventEditor } from './event-editor';
@@ -24,10 +25,6 @@ import { startOfDay, endOfDay } from 'date-fns';
 import { updateMissionFromCalendarEvent } from '@/lib/mission-calendar-sync';
 import { isPreviewMode } from '@/lib/preview-mode';
 import { mockCalendarEvents } from '@/lib/mockData';
-
-const HOUR_HEIGHT = 80;
-const START_HOUR = 4;
-const END_HOUR = 22;
 
 type WeekViewProps = {
   userId: string;
@@ -46,7 +43,7 @@ export function WeekView({ userId, currentWeekStart, onWeekChange }: WeekViewPro
   const containerRef = useRef<HTMLDivElement>(null);
 
   const weekDays = getWeekDays(currentWeekStart);
-  const hours = getHourSlots(START_HOUR, END_HOUR);
+  const hours = getHourSlots(GRID_START_HOUR, GRID_END_HOUR);
 
   useEffect(() => {
     loadEvents();
@@ -284,20 +281,20 @@ export function WeekView({ userId, currentWeekStart, onWeekChange }: WeekViewPro
               <div className="flex items-center justify-center h-96 text-white">Loading...</div>
             ) : (
               <div ref={containerRef} className="relative overflow-y-auto max-h-[600px]">
-                <TimeGrid hours={hours} hourHeight={HOUR_HEIGHT} weekDays={weekDays} onGridClick={handleCreateEvent} />
+                <TimeGrid hours={hours} hourHeight={HOUR_HEIGHT_PX} weekDays={weekDays} onGridClick={handleCreateEvent} />
 
                 <div className="absolute top-0 left-12 md:left-16 right-0 pointer-events-none">
                   <div className="grid grid-cols-7 h-full">
                     {weekDays.map((day, dayIndex) => {
-                      const dayEvents = positionEventsForDay(events, day, START_HOUR, HOUR_HEIGHT);
+                      const dayEvents = positionEventsForDay(events, day, GRID_START_HOUR, HOUR_HEIGHT_PX);
 
                       return (
-                        <div key={dayIndex} className="relative pointer-events-none min-w-[110px] sm:min-w-0" style={{ height: `${hours.length * HOUR_HEIGHT}px` }}>
+                        <div key={dayIndex} className="relative pointer-events-none min-w-[110px] sm:min-w-0" style={{ height: `${hours.length * HOUR_HEIGHT_PX}px` }}>
                           {dayEvents.map((block) => (
                             <div key={block.event.id} className="pointer-events-auto">
                               <CalendarEventComponent
                                 block={block}
-                                hourHeight={HOUR_HEIGHT}
+                                hourHeight={HOUR_HEIGHT_PX}
                                 onDragEnd={handleDragEnd}
                                 onResizeEnd={handleResizeEnd}
                                 onClick={(id) => setEditingEvent(events.find((e) => e.id === id) || null)}

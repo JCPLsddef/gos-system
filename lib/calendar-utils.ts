@@ -1,5 +1,6 @@
 import { startOfWeek, endOfWeek, addDays, format, startOfDay, endOfDay, addMinutes, differenceInMinutes, isSameDay, parseISO } from 'date-fns';
 import { toZonedTime, fromZonedTime } from 'date-fns-tz';
+import { PX_PER_MINUTE, MIN_EVENT_HEIGHT_PX } from './calendarLayout';
 
 const TIMEZONE = 'America/Toronto';
 
@@ -48,14 +49,13 @@ export function calculateEventPosition(
     return null;
   }
 
-  const startHourDate = new Date(day);
-  startHourDate.setHours(startHour, 0, 0, 0);
-
-  const minutesFromStart = differenceInMinutes(eventStart, startHourDate);
+  const gridStartMinutes = startHour * 60;
+  const eventStartMinutes = eventStart.getHours() * 60 + eventStart.getMinutes();
   const durationMinutes = differenceInMinutes(eventEnd, eventStart);
 
-  const top = (minutesFromStart / 60) * hourHeight;
-  const height = Math.max((durationMinutes / 60) * hourHeight, 80);
+  const minutesFromGridStart = eventStartMinutes - gridStartMinutes;
+  const top = minutesFromGridStart * PX_PER_MINUTE;
+  const height = Math.max(durationMinutes * PX_PER_MINUTE, MIN_EVENT_HEIGHT_PX);
 
   return {
     event,
