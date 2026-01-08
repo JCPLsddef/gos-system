@@ -49,6 +49,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     if (!error) {
+      // Ensure session is fully set before redirect (critical for mobile)
+      await supabase.auth.getSession();
+
+      // Sync server-side session state
+      router.refresh();
+
+      // Small delay to ensure cookies are written and readable by middleware
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      // Navigate to dashboard
       router.push('/dashboard');
     }
 
@@ -74,6 +84,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .maybeSingle();
       }
 
+      // Ensure session is fully set before redirect (critical for mobile)
+      await supabase.auth.getSession();
+
+      // Sync server-side session state
+      router.refresh();
+
+      // Small delay to ensure cookies are written and readable by middleware
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      // Navigate to dashboard
       router.push('/dashboard');
     }
 
