@@ -1,7 +1,8 @@
 import { supabase } from './supabase';
 import { cancelNotificationForMission } from './notifications';
-import { format, startOfDay } from 'date-fns';
+import { format, startOfDay, isSameDay } from 'date-fns';
 import { toZonedTime } from 'date-fns-tz';
+import { getTorontoDate, isSameDayToronto } from './date-utils';
 
 const TIMEZONE = 'America/Toronto';
 
@@ -237,4 +238,34 @@ export async function deleteMission(missionId: string): Promise<void> {
     .eq('id', missionId);
 
   if (error) throw error;
+}
+
+export function selectMissionsForDay(missions: Mission[], date?: Date): Mission[] {
+  const targetDate = date || new Date();
+  return missions.filter((m) => {
+    if (m.is_recurring) return true;
+    if (!m.start_at) return false;
+    return isSameDayToronto(new Date(m.start_at), targetDate);
+  });
+}
+
+export function selectMissionsForWeek(missions: Mission[], weekStart: Date, weekEnd: Date): Mission[] {
+  return missions.filter((m) => {
+    if (m.is_recurring) return true;
+    if (!m.start_at) return false;
+    const startDate = new Date(m.start_at);
+    return startDate >= weekStart && startDate <= weekEnd;
+  });
+}
+
+export function sumRemainingDurationMins(missions: Mission[]): number {
+  return missions
+    .filter((m) => !m.completed_at)
+    .reduce((sum, m) => sum + m.duration_minutes, 0);
+}
+
+export function sumCompletedDurationMins(missions: Mission[]): number {
+  return missions
+    .filter((m) => m.completed_at)
+    .reduce((sum, m) => sum + m.duration_minutes, 0);
 }

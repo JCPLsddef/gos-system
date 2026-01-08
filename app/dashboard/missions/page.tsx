@@ -11,13 +11,19 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { Plus, Check, Calendar, Target, Pencil, Trash2, X, ArrowLeft, Repeat } from 'lucide-react';
+import { Plus, Check, Calendar, Target, Pencil, Trash2, X, ArrowLeft, Repeat, Sun } from 'lucide-react';
 import { DurationEditor } from '@/components/duration-editor';
 import { NewMissionModal } from '@/components/new-mission-modal';
 import { DateTimePicker } from '@/components/date-time-picker';
 import { getColorHex } from '@/lib/color-mapping';
-import { isBefore, differenceInHours } from 'date-fns';
-import { getTorontoDate } from '@/lib/date-utils';
+import { isBefore, differenceInHours, format } from 'date-fns';
+import {
+  getTorontoDate,
+  getMinutesLeftTodayToronto,
+  formatDuration,
+  getCurrentWeekStart,
+  getWeekRange,
+} from '@/lib/date-utils';
 import {
   getMissions,
   createMission,
@@ -25,6 +31,7 @@ import {
   completeMission,
   uncompleteMission,
   deleteMission,
+  selectMissionsForDay,
   type Mission,
 } from '@/lib/missions-service';
 import { syncMissionToCalendar, deleteMissionCalendarEvent } from '@/lib/mission-calendar-sync';
@@ -38,23 +45,34 @@ type Battlefront = {
 };
 
 type FilterType = 'all' | 'active' | 'completed' | 'overdue' | 'due-soon';
+type ViewMode = 'week' | 'day';
 
 export default function MasterMissionsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useAuth();
-  const [missions, setMissions] = useState<Mission[]>([]);
+  const [allMissions, setAllMissions] = useState<Mission[]>([]);
   const [battlefronts, setBattlefronts] = useState<Battlefront[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingTitle, setEditingTitle] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [showNewModal, setShowNewModal] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<Mission | null>(null);
+  const [minutesLeftToday, setMinutesLeftToday] = useState(() => getMinutesLeftTodayToronto());
 
   const urlFilter = searchParams.get('filter') as FilterType | null;
   const urlBattlefront = searchParams.get('battlefront');
+  const urlMode = searchParams.get('mode') as ViewMode | null;
   const [filter, setFilter] = useState<FilterType>('active');
   const [battlefrontFilter, setBattlefrontFilter] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>('week');
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setMinutesLeftToday(getMinutesLeftTodayToronto());
+    }, 60000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     if (urlFilter) {
@@ -63,7 +81,10 @@ export default function MasterMissionsPage() {
     if (urlBattlefront) {
       setBattlefrontFilter(urlBattlefront);
     }
-  }, [urlFilter, urlBattlefront]);
+    if (urlMode) {
+      setViewMode(urlMode);
+    }
+  }, [urlFilter, urlBattlefront, urlMode]);
 
   useEffect(() => {
     if (user) {
@@ -76,22 +97,20 @@ export default function MasterMissionsPage() {
 
     setLoading(true);
 
-    // PREVIEW MODE: Use mock data for visual validation
     if (isPreviewMode()) {
-      setMissions(mockMissions as any);
+      setAllMissions(mockMissions as any);
       setBattlefronts(mockBattlefronts.map(bf => ({ id: bf.id, name: bf.name, color: 'blue' })));
       setLoading(false);
       return;
     }
 
-    // PRODUCTION: Real Supabase queries
     try {
       const [missionsData, battlefrontsData] = await Promise.all([
         getMissions(user.id),
         supabase.from('battlefronts').select('id, name, color').eq('user_id', user.id),
       ]);
 
-      setMissions(missionsData);
+      setAllMissions(missionsData);
       setBattlefronts(battlefrontsData.data || []);
     } catch (error: any) {
       toast.error('Failed to load missions');
@@ -99,6 +118,24 @@ export default function MasterMissionsPage() {
       setLoading(false);
     }
   };
+
+  const now = getTorontoDate();
+  const weekStart = getCurrentWeekStart();
+  const { start: weekRangeStart, end: weekRangeEnd } = getWeekRange(weekStart);
+
+  const getMissionsForCurrentView = (): Mission[] => {
+    if (viewMode === 'day') {
+      return selectMissionsForDay(allMissions, now);
+    }
+    return allMissions.filter((m) => {
+      if (m.is_recurring) return true;
+      if (!m.start_at) return true;
+      const startDate = new Date(m.start_at);
+      return startDate >= weekRangeStart && startDate <= weekRangeEnd;
+    });
+  };
+
+  const missions = getMissionsForCurrentView();
 
   const handleCreateMission = async (data: any) => {
     if (!user) return;
@@ -118,7 +155,7 @@ export default function MasterMissionsPage() {
         });
       }
 
-      setMissions([newMission, ...missions]);
+      setAllMissions([newMission, ...allMissions]);
       toast.success('Mission created');
     } catch (error) {
       toast.error('Failed to create mission');
@@ -149,7 +186,7 @@ export default function MasterMissionsPage() {
         newMissions.push(newMission);
       }
 
-      setMissions([...newMissions, ...missions]);
+      setAllMissions([...newMissions, ...allMissions]);
     } catch (error) {
       toast.error('Failed to create missions');
     }
@@ -161,23 +198,23 @@ export default function MasterMissionsPage() {
       completed_at: mission.completed_at ? null : new Date().toISOString(),
     };
 
-    setMissions(missions.map((m) => (m.id === mission.id ? optimisticUpdate : m)));
+    setAllMissions(allMissions.map((m) => (m.id === mission.id ? optimisticUpdate : m)));
 
     try {
       const updated = mission.completed_at
         ? await uncompleteMission(mission.id)
         : await completeMission(mission.id);
 
-      setMissions(missions.map((m) => (m.id === mission.id ? updated : m)));
+      setAllMissions(allMissions.map((m) => (m.id === mission.id ? updated : m)));
       toast.success(updated.completed_at ? 'Mission completed!' : 'Mission reopened');
     } catch (error: any) {
-      setMissions(missions.map((m) => (m.id === mission.id ? mission : m)));
+      setAllMissions(allMissions.map((m) => (m.id === mission.id ? mission : m)));
       toast.error(error.message || 'Failed to update mission');
     }
   };
 
   const handleUpdateTitle = async (missionId: string) => {
-    const mission = missions.find((m) => m.id === missionId);
+    const mission = allMissions.find((m) => m.id === missionId);
     const newTitle = editTitle.trim();
 
     if (!newTitle || mission?.title === newTitle) {
@@ -187,7 +224,7 @@ export default function MasterMissionsPage() {
 
     try {
       const updated = await updateMission(missionId, { title: newTitle });
-      setMissions(missions.map((m) => (m.id === missionId ? updated : m)));
+      setAllMissions(allMissions.map((m) => (m.id === missionId ? updated : m)));
       setEditingTitle(null);
       toast.success('Title updated');
     } catch (error) {
@@ -196,7 +233,7 @@ export default function MasterMissionsPage() {
   };
 
   const handleUpdateBattlefront = async (missionId: string, battlefrontId: string) => {
-    const mission = missions.find((m) => m.id === missionId);
+    const mission = allMissions.find((m) => m.id === missionId);
     const newBattlefrontId = battlefrontId === '__none__' ? undefined : battlefrontId;
     if (!mission || mission.battlefront_id === newBattlefrontId) return;
 
@@ -204,7 +241,7 @@ export default function MasterMissionsPage() {
       const updated = await updateMission(missionId, {
         battlefront_id: newBattlefrontId,
       });
-      setMissions(missions.map((m) => (m.id === missionId ? updated : m)));
+      setAllMissions(allMissions.map((m) => (m.id === missionId ? updated : m)));
       toast.success('Battlefront updated');
     } catch (error) {
       toast.error('Failed to update battlefront');
@@ -212,7 +249,7 @@ export default function MasterMissionsPage() {
   };
 
   const handleUpdateDuration = async (missionId: string, duration: number) => {
-    const mission = missions.find((m) => m.id === missionId);
+    const mission = allMissions.find((m) => m.id === missionId);
     if (!mission) return;
 
     try {
@@ -230,7 +267,7 @@ export default function MasterMissionsPage() {
         });
       }
 
-      setMissions(missions.map((m) => (m.id === missionId ? updated : m)));
+      setAllMissions(allMissions.map((m) => (m.id === missionId ? updated : m)));
       toast.success('Duration updated');
     } catch (error) {
       toast.error('Failed to update duration');
@@ -238,11 +275,11 @@ export default function MasterMissionsPage() {
   };
 
   const handleUpdateStartAt = async (missionId: string, startAt: string | null) => {
-    const mission = missions.find((m) => m.id === missionId);
+    const mission = allMissions.find((m) => m.id === missionId);
     if (!mission || !user) return;
 
     const optimistic = { ...mission, start_at: startAt };
-    setMissions(missions.map((m) => (m.id === missionId ? optimistic : m)));
+    setAllMissions(allMissions.map((m) => (m.id === missionId ? optimistic : m)));
 
     try {
       const updated = await updateMission(missionId, { start_at: startAt || undefined });
@@ -260,7 +297,7 @@ export default function MasterMissionsPage() {
       await loadData();
       toast.success(startAt ? 'Mission scheduled' : 'Schedule cleared');
     } catch (error) {
-      setMissions(missions.map((m) => (m.id === missionId ? mission : m)));
+      setAllMissions(allMissions.map((m) => (m.id === missionId ? mission : m)));
       toast.error('Failed to update schedule');
     }
   };
@@ -271,7 +308,7 @@ export default function MasterMissionsPage() {
         await deleteMissionCalendarEvent(mission.id);
       }
       await deleteMission(mission.id);
-      setMissions(missions.filter((m) => m.id !== mission.id));
+      setAllMissions(allMissions.filter((m) => m.id !== mission.id));
       setDeleteConfirm(null);
       toast.success('Mission deleted');
     } catch (error) {
@@ -291,7 +328,16 @@ export default function MasterMissionsPage() {
     router.push('/dashboard/missions');
   };
 
-  const now = getTorontoDate();
+  const handleViewModeChange = (mode: ViewMode) => {
+    setViewMode(mode);
+    const params = new URLSearchParams(window.location.search);
+    if (mode === 'day') {
+      params.set('mode', 'day');
+    } else {
+      params.delete('mode');
+    }
+    router.push(`/dashboard/missions${params.toString() ? `?${params.toString()}` : ''}`);
+  };
 
   const filteredMissions = missions
     .filter((m) => {
@@ -347,19 +393,63 @@ export default function MasterMissionsPage() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-4xl font-bold text-white">MASTER MISSIONS</h1>
-          <p className="text-slate-400 text-lg mt-1">All missions across battlefronts</p>
+          <h1 className="text-2xl sm:text-4xl font-bold text-white">MASTER MISSIONS</h1>
+          <p className="text-slate-400 text-sm sm:text-lg mt-1">
+            {viewMode === 'day' ? "Today's missions" : 'All missions this week'}
+          </p>
         </div>
-        <Button onClick={() => setShowNewModal(true)} className="bg-blue-600 hover:bg-blue-700">
-          <Plus className="w-4 h-4 mr-2" />
-          New Mission
-        </Button>
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2 bg-slate-800/50 p-1 rounded-lg border border-slate-700">
+            <Button
+              variant={viewMode === 'week' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => handleViewModeChange('week')}
+              className={viewMode === 'week' ? 'bg-blue-600 hover:bg-blue-700' : 'text-slate-400 hover:text-white'}
+            >
+              <Calendar className="w-4 h-4 mr-1.5" />
+              Week
+            </Button>
+            <Button
+              variant={viewMode === 'day' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => handleViewModeChange('day')}
+              className={viewMode === 'day' ? 'bg-blue-600 hover:bg-blue-700' : 'text-slate-400 hover:text-white'}
+            >
+              <Sun className="w-4 h-4 mr-1.5" />
+              Day
+            </Button>
+          </div>
+          <Button onClick={() => setShowNewModal(true)} className="bg-blue-600 hover:bg-blue-700">
+            <Plus className="w-4 h-4 mr-2" />
+            New Mission
+          </Button>
+        </div>
       </div>
 
+      {viewMode === 'day' && (
+        <Card className="bg-slate-800/30 border-slate-700 p-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <Sun className="w-5 h-5 text-amber-400" />
+              <div>
+                <div className="text-white font-semibold">{format(now, 'EEEE, MMMM d')}</div>
+                <div className="text-slate-400 text-sm">Showing only today&apos;s scheduled missions</div>
+              </div>
+            </div>
+            <div className="text-left sm:text-right">
+              <div className={`text-lg font-bold ${minutesLeftToday > 0 ? 'text-blue-400' : 'text-slate-500'}`}>
+                {minutesLeftToday > 0 ? formatDuration(minutesLeftToday) : '0m'}
+              </div>
+              <div className="text-slate-400 text-xs">Time left today (until 10 PM)</div>
+            </div>
+          </div>
+        </Card>
+      )}
+
       {hasActiveFilters && (
-        <div className="flex items-center gap-3 p-3 bg-slate-800/50 rounded-lg border border-slate-700">
+        <div className="flex items-center gap-3 p-3 bg-slate-800/50 rounded-lg border border-slate-700 flex-wrap">
           <span className="text-slate-400 text-sm">Filtered by:</span>
           {battlefrontFilter && (
             <Badge className="bg-slate-700 text-white flex items-center gap-1 max-w-[200px] md:max-w-xs">
@@ -409,6 +499,7 @@ export default function MasterMissionsPage() {
           variant={filter === 'active' && !battlefrontFilter ? 'default' : 'outline'}
           onClick={() => { setFilter('active'); setBattlefrontFilter(null); }}
           className={filter === 'active' && !battlefrontFilter ? 'bg-blue-600' : 'bg-slate-800 border-slate-600 text-white'}
+          size="sm"
         >
           Active ({stats.active})
         </Button>
@@ -416,6 +507,7 @@ export default function MasterMissionsPage() {
           variant={filter === 'completed' ? 'default' : 'outline'}
           onClick={() => setFilter('completed')}
           className={filter === 'completed' ? 'bg-blue-600' : 'bg-slate-800 border-slate-600 text-white'}
+          size="sm"
         >
           Completed ({stats.completed})
         </Button>
@@ -423,6 +515,7 @@ export default function MasterMissionsPage() {
           variant={filter === 'overdue' ? 'default' : 'outline'}
           onClick={() => setFilter('overdue')}
           className={filter === 'overdue' ? 'bg-red-600' : 'bg-slate-800 border-slate-600 text-white'}
+          size="sm"
         >
           Overdue
         </Button>
@@ -430,6 +523,7 @@ export default function MasterMissionsPage() {
           variant={filter === 'due-soon' ? 'default' : 'outline'}
           onClick={() => setFilter('due-soon')}
           className={filter === 'due-soon' ? 'bg-amber-600' : 'bg-slate-800 border-slate-600 text-white'}
+          size="sm"
         >
           Due Soon
         </Button>
@@ -437,6 +531,7 @@ export default function MasterMissionsPage() {
           variant={filter === 'all' ? 'default' : 'outline'}
           onClick={() => setFilter('all')}
           className={filter === 'all' ? 'bg-blue-600' : 'bg-slate-800 border-slate-600 text-white'}
+          size="sm"
         >
           All ({stats.total})
         </Button>
@@ -447,24 +542,24 @@ export default function MasterMissionsPage() {
           <table className="w-full">
             <thead className="bg-slate-800/50 border-b border-slate-700">
               <tr>
-                <th className="text-left p-4 text-slate-400 font-semibold w-12"></th>
-                <th className="text-left p-4 text-slate-400 font-semibold">Mission</th>
-                <th className="text-left p-4 text-slate-400 font-semibold">Battlefront</th>
-                <th className="text-left p-4 text-slate-400 font-semibold">Scheduled For</th>
-                <th className="text-left p-4 text-slate-400 font-semibold">Duration</th>
-                <th className="text-left p-4 text-slate-400 font-semibold w-24">Status</th>
-                <th className="text-left p-4 text-slate-400 font-semibold w-20">Actions</th>
+                <th className="text-left p-3 sm:p-4 text-slate-400 font-semibold w-12"></th>
+                <th className="text-left p-3 sm:p-4 text-slate-400 font-semibold text-sm">Mission</th>
+                <th className="text-left p-3 sm:p-4 text-slate-400 font-semibold text-sm hidden md:table-cell">Battlefront</th>
+                <th className="text-left p-3 sm:p-4 text-slate-400 font-semibold text-sm hidden lg:table-cell">Scheduled For</th>
+                <th className="text-left p-3 sm:p-4 text-slate-400 font-semibold text-sm hidden sm:table-cell">Duration</th>
+                <th className="text-left p-3 sm:p-4 text-slate-400 font-semibold w-24 text-sm">Status</th>
+                <th className="text-left p-3 sm:p-4 text-slate-400 font-semibold w-20 text-sm">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-700">
               {filteredMissions.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="p-8 text-center text-slate-400">
-                    {filter === 'active' && !battlefrontFilter && 'No active missions'}
+                    {filter === 'active' && !battlefrontFilter && `No active missions ${viewMode === 'day' ? 'today' : 'this week'}`}
                     {filter === 'completed' && 'No completed missions'}
                     {filter === 'overdue' && 'No overdue missions - great job!'}
                     {filter === 'due-soon' && 'No missions due soon'}
-                    {filter === 'all' && !battlefrontFilter && 'No missions yet. Click "New Mission" to create one.'}
+                    {filter === 'all' && !battlefrontFilter && `No missions ${viewMode === 'day' ? 'today' : 'this week'}. Click "New Mission" to create one.`}
                     {battlefrontFilter && 'No missions matching this filter'}
                   </td>
                 </tr>
@@ -478,7 +573,7 @@ export default function MasterMissionsPage() {
                         mission.completed_at ? 'opacity-60' : ''
                       }`}
                     >
-                      <td className="p-4">
+                      <td className="p-3 sm:p-4">
                         <button
                           type="button"
                           onClick={(e) => {
@@ -496,7 +591,7 @@ export default function MasterMissionsPage() {
                           {mission.completed_at && <Check className="w-4 h-4 text-white" />}
                         </button>
                       </td>
-                      <td className="p-4">
+                      <td className="p-3 sm:p-4">
                         <div className="flex items-center gap-2">
                           {mission.is_recurring && (
                             <span title="Daily mission - resets at midnight">
@@ -526,7 +621,7 @@ export default function MasterMissionsPage() {
                                 setEditingTitle(mission.id);
                                 setEditTitle(mission.title);
                               }}
-                              className={`cursor-pointer hover:text-blue-400 transition-colors ${
+                              className={`cursor-pointer hover:text-blue-400 transition-colors text-sm sm:text-base ${
                                 mission.completed_at ? 'line-through text-slate-400' : 'text-white font-medium'
                               }`}
                             >
@@ -534,8 +629,19 @@ export default function MasterMissionsPage() {
                             </span>
                           )}
                         </div>
+                        <div className="md:hidden mt-1">
+                          {bfColor && (
+                            <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                              <div
+                                className="w-2 h-2 rounded-full flex-shrink-0"
+                                style={{ backgroundColor: getColorHex(bfColor) }}
+                              />
+                              {mission.battlefront?.name || 'Unassigned'}
+                            </div>
+                          )}
+                        </div>
                       </td>
-                      <td className="p-4">
+                      <td className="p-3 sm:p-4 hidden md:table-cell">
                         <div className="flex items-center gap-2">
                           {bfColor && (
                             <div
@@ -547,7 +653,7 @@ export default function MasterMissionsPage() {
                             value={mission.battlefront_id || '__none__'}
                             onValueChange={(value) => handleUpdateBattlefront(mission.id, value)}
                           >
-                            <SelectTrigger className="bg-slate-800 border-slate-600 text-white w-40">
+                            <SelectTrigger className="bg-slate-800 border-slate-600 text-white w-32 lg:w-40 text-sm">
                               <SelectValue placeholder="Select battlefront">
                                 {mission.battlefront?.name || 'Unassigned'}
                               </SelectValue>
@@ -573,42 +679,42 @@ export default function MasterMissionsPage() {
                           </Select>
                         </div>
                       </td>
-                      <td className="p-4">
+                      <td className="p-3 sm:p-4 hidden lg:table-cell">
                         <DateTimePicker
                           value={mission.start_at}
                           onChange={(value) => handleUpdateStartAt(mission.id, value)}
                           placeholder="Schedule mission"
                         />
                       </td>
-                      <td className="p-4">
+                      <td className="p-3 sm:p-4 hidden sm:table-cell">
                         <DurationEditor
                           initialDuration={mission.duration_minutes}
                           onSave={(duration) => handleUpdateDuration(mission.id, duration)}
                         />
                       </td>
-                      <td className="p-4">
+                      <td className="p-3 sm:p-4">
                         <div className="flex flex-col gap-1">
                           {mission.is_recurring && (
-                            <Badge className="bg-amber-600 text-white flex items-center gap-1 w-fit">
+                            <Badge className="bg-amber-600 text-white flex items-center gap-1 w-fit text-xs">
                               <Repeat className="w-3 h-3" />
                               Daily
                             </Badge>
                           )}
                           {mission.completed_at ? (
-                            <Badge className="bg-slate-600 text-white">Done</Badge>
+                            <Badge className="bg-slate-600 text-white text-xs">Done</Badge>
                           ) : mission.start_at && !mission.is_recurring ? (
-                            <Badge className="bg-green-600 text-white flex items-center gap-1 w-fit">
+                            <Badge className="bg-green-600 text-white flex items-center gap-1 w-fit text-xs">
                               <Calendar className="w-3 h-3" />
                               Scheduled
                             </Badge>
                           ) : !mission.is_recurring ? (
-                            <Badge variant="outline" className="border-slate-600 text-slate-400">
+                            <Badge variant="outline" className="border-slate-600 text-slate-400 text-xs">
                               Not scheduled
                             </Badge>
                           ) : null}
                         </div>
                       </td>
-                      <td className="p-4">
+                      <td className="p-3 sm:p-4">
                         <div className="flex items-center gap-1">
                           <Button
                             variant="ghost"
@@ -640,29 +746,29 @@ export default function MasterMissionsPage() {
         </div>
       </Card>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="bg-slate-900/50 border-slate-700 p-6">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+        <Card className="bg-slate-900/50 border-slate-700 p-4 sm:p-6">
           <div className="text-center">
-            <div className="text-3xl font-bold text-white">{stats.total}</div>
-            <div className="text-slate-400 mt-1">Total Missions</div>
+            <div className="text-2xl sm:text-3xl font-bold text-white">{stats.total}</div>
+            <div className="text-slate-400 text-xs sm:text-sm mt-1">Total</div>
           </div>
         </Card>
-        <Card className="bg-slate-900/50 border-slate-700 p-6">
+        <Card className="bg-slate-900/50 border-slate-700 p-4 sm:p-6">
           <div className="text-center">
-            <div className="text-3xl font-bold text-green-500">{stats.completed}</div>
-            <div className="text-slate-400 mt-1">Completed</div>
+            <div className="text-2xl sm:text-3xl font-bold text-green-500">{stats.completed}</div>
+            <div className="text-slate-400 text-xs sm:text-sm mt-1">Completed</div>
           </div>
         </Card>
-        <Card className="bg-slate-900/50 border-slate-700 p-6">
+        <Card className="bg-slate-900/50 border-slate-700 p-4 sm:p-6">
           <div className="text-center">
-            <div className="text-3xl font-bold text-blue-500">{stats.active}</div>
-            <div className="text-slate-400 mt-1">Active</div>
+            <div className="text-2xl sm:text-3xl font-bold text-blue-500">{stats.active}</div>
+            <div className="text-slate-400 text-xs sm:text-sm mt-1">Active</div>
           </div>
         </Card>
-        <Card className="bg-slate-900/50 border-slate-700 p-6">
+        <Card className="bg-slate-900/50 border-slate-700 p-4 sm:p-6">
           <div className="text-center">
-            <div className="text-3xl font-bold text-emerald-500">{stats.scheduled}</div>
-            <div className="text-slate-400 mt-1">Scheduled</div>
+            <div className="text-2xl sm:text-3xl font-bold text-emerald-500">{stats.scheduled}</div>
+            <div className="text-slate-400 text-xs sm:text-sm mt-1">Scheduled</div>
           </div>
         </Card>
       </div>
@@ -680,7 +786,7 @@ export default function MasterMissionsPage() {
           <DialogHeader>
             <DialogTitle>Delete Mission</DialogTitle>
             <DialogDescription className="text-slate-400">
-              Are you sure you want to delete "{deleteConfirm?.title}"? This action cannot be undone.
+              Are you sure you want to delete &quot;{deleteConfirm?.title}&quot;? This action cannot be undone.
               {deleteConfirm?.calendar_event_id && (
                 <span className="block mt-2 text-amber-400">
                   This will also remove the linked calendar event.

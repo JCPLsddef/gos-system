@@ -1,10 +1,46 @@
-import { startOfWeek, endOfWeek, format, addDays, startOfDay, endOfDay } from 'date-fns';
+import { startOfWeek, endOfWeek, format, addDays, startOfDay, endOfDay, isSameDay, differenceInMinutes, setHours, setMinutes, setSeconds, setMilliseconds } from 'date-fns';
 import { toZonedTime, fromZonedTime } from 'date-fns-tz';
 
 export const TIMEZONE = 'America/Toronto';
+export const END_OF_DAY_HOUR = 22;
 
 export function getTorontoDate(date?: Date): Date {
   return toZonedTime(date || new Date(), TIMEZONE);
+}
+
+export function getEndOfDayToronto(date?: Date): Date {
+  const torontoDate = getTorontoDate(date);
+  return setMilliseconds(setSeconds(setMinutes(setHours(torontoDate, END_OF_DAY_HOUR), 0), 0), 0);
+}
+
+export function getMinutesLeftTodayToronto(now?: Date): number {
+  const torontoNow = getTorontoDate(now);
+  const endOfDay = getEndOfDayToronto(now);
+  const diff = differenceInMinutes(endOfDay, torontoNow);
+  return Math.max(0, diff);
+}
+
+export function isDayFinishedToronto(now?: Date): boolean {
+  return getMinutesLeftTodayToronto(now) === 0;
+}
+
+export function getTodayRangeToronto(date?: Date): { start: Date; end: Date } {
+  const torontoDate = getTorontoDate(date);
+  return {
+    start: startOfDay(torontoDate),
+    end: getEndOfDayToronto(date),
+  };
+}
+
+export function isSameDayToronto(date1: Date | string, date2: Date | string): boolean {
+  const d1 = typeof date1 === 'string' ? new Date(date1) : date1;
+  const d2 = typeof date2 === 'string' ? new Date(date2) : date2;
+  return isSameDay(getTorontoDate(d1), getTorontoDate(d2));
+}
+
+export function getTorontoDateString(date?: Date): string {
+  const torontoDate = getTorontoDate(date);
+  return format(torontoDate, 'yyyy-MM-dd');
 }
 
 export function getWeekRange(date: Date): { start: Date; end: Date } {
