@@ -33,7 +33,7 @@ export function TimeGrid({ hours, hourHeight, weekDays, onGridClick }: TimeGridP
       {/* Day columns */}
       <div className="flex-1 grid grid-cols-7">
         {weekDays.map((day, dayIndex) => (
-          <div key={dayIndex} className="border-r border-slate-700 last:border-r-0 relative">
+          <div key={dayIndex} className="border-r border-slate-700 last:border-r-0 relative min-w-[110px] sm:min-w-0">
             {hours.map((hour) => (
               <div
                 key={hour}

@@ -345,8 +345,53 @@ export default function WarMapPage() {
               key={front.id}
               className="bg-slate-900/50 border-slate-700 hover:border-slate-500 transition-all flex flex-col"
             >
-              <div className="p-6 flex flex-col h-full">
-                <div className="flex items-start justify-between mb-4 gap-3">
+              <div className="p-4 sm:p-6 flex flex-col h-full">
+                {/* Mobile layout: 2 rows */}
+                <div className="flex flex-col gap-2 mb-4 sm:hidden">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <div
+                        className="w-3 h-3 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: getColorHex(front.color) }}
+                        title={`Color: ${front.color}`}
+                      />
+                      <Link href={`/dashboard/battlefronts/${front.id}`} className="min-w-0 flex-1">
+                        <h3 className="text-sm font-bold text-white hover:text-blue-400 transition-colors cursor-pointer truncate">
+                          {front.name}
+                        </h3>
+                      </Link>
+                    </div>
+                    <Badge className={`${getStatusColor(front.status)} text-white flex items-center gap-1 text-xs px-2 py-0.5 flex-shrink-0`}>
+                      {getStatusIcon(front.status)}
+                      <span className="hidden xs:inline">{front.status}</span>
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-1 justify-end">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => openEditDialog(front)}
+                      className="h-7 w-7 p-0 hover:bg-slate-700"
+                    >
+                      <Edit2 className="w-3.5 h-3.5 text-slate-400 hover:text-white" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => openDeleteDialog(front)}
+                      className="h-7 w-7 p-0 hover:bg-slate-700"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-slate-400 hover:text-red-400" />
+                    </Button>
+                    <ColorPicker
+                      value={front.color}
+                      onChange={(color) => handleUpdateColor(front.id, color)}
+                    />
+                  </div>
+                </div>
+
+                {/* Desktop layout: single row */}
+                <div className="hidden sm:flex items-start justify-between mb-4 gap-3">
                   <div className="flex items-start gap-3 min-w-0 flex-1">
                     <div
                       className="w-4 h-4 rounded-full flex-shrink-0 mt-1"
@@ -354,7 +399,7 @@ export default function WarMapPage() {
                       title={`Color: ${front.color}`}
                     />
                     <Link href={`/dashboard/battlefronts/${front.id}`} className="min-w-0 flex-1">
-                      <h3 className="text-sm sm:text-base md:text-xl font-bold text-white hover:text-blue-400 transition-colors cursor-pointer break-words leading-tight">
+                      <h3 className="text-base md:text-xl font-bold text-white hover:text-blue-400 transition-colors cursor-pointer break-words leading-tight">
                         {front.name}
                       </h3>
                     </Link>
