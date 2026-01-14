@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { Pencil, Trash2, Rocket, Search, X, Plus } from 'lucide-react';
+import { Trash2, Rocket, Search, X, Plus } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { DurationEditor } from '@/components/duration-editor';
 import { DeployMissionModal } from '@/components/deploy-mission-modal';
@@ -82,13 +82,20 @@ export default function MasterListPage() {
         supabase.from('battlefronts').select('id, name, color').eq('user_id', user.id),
       ]);
 
-      if (templatesData.error) throw templatesData.error;
-      if (battlefrontsData.error) throw battlefrontsData.error;
+      if (templatesData.error) {
+        console.error('Load templates error:', templatesData.error);
+        throw templatesData.error;
+      }
+      if (battlefrontsData.error) {
+        console.error('Load battlefronts error:', battlefrontsData.error);
+        throw battlefrontsData.error;
+      }
 
       setTemplates(templatesData.data || []);
       setBattlefronts(battlefrontsData.data || []);
     } catch (error: any) {
-      toast.error('Failed to load templates');
+      console.error('Failed to load data:', error);
+      toast.error(error?.message || 'Failed to load templates');
     } finally {
       setLoading(false);
     }
@@ -101,22 +108,30 @@ export default function MasterListPage() {
       const { data, error } = await supabase
         .from('mission_templates')
         .insert({
+          user_id: user.id,
           title: newTemplateTitle.trim(),
           description: '',
           duration_minutes: 60,
           color: '#3b82f6',
         })
-        .select()
+        .select(`
+          *,
+          battlefront:battlefronts(id, name, color)
+        `)
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Create template error:', error);
+        throw error;
+      }
 
       setTemplates([data, ...templates]);
       setNewTemplateTitle('');
       setNewTemplateModal(false);
       toast.success('Template created');
-    } catch (error) {
-      toast.error('Failed to create template');
+    } catch (error: any) {
+      console.error('Failed to create template:', error);
+      toast.error(error?.message || 'Failed to create template');
     }
   };
 
@@ -201,35 +216,56 @@ export default function MasterListPage() {
       const { data: mission, error } = await supabase
         .from('missions')
         .insert({
+          user_id: user.id,
           title: template.title,
-          description: template.description,
           battlefront_id: template.battlefront_id,
           duration_minutes: data.duration_minutes,
           start_at: data.start_at,
           due_date: data.due_date,
-          color: template.color,
-          status: 'pending',
         })
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Create mission error:', error);
+        throw error;
+      }
 
       const startDate = new Date(data.start_at);
       const endDate = new Date(startDate.getTime() + data.duration_minutes * 60000);
 
-      await supabase.from('calendar_events').insert({
+      const { error: calendarError } = await supabase.from('calendar_events').insert({
+        user_id: user.id,
         mission_id: mission.id,
         title: mission.title,
         start_time: startDate.toISOString(),
         end_time: endDate.toISOString(),
-        color: mission.color,
+        battlefront_id: template.battlefront_id,
       });
+
+      if (calendarError) {
+        console.error('Create calendar event error:', calendarError);
+      }
+
+      // Update mission with calendar_event_id
+      const { data: calendarEvent } = await supabase
+        .from('calendar_events')
+        .select('id')
+        .eq('mission_id', mission.id)
+        .single();
+
+      if (calendarEvent) {
+        await supabase
+          .from('missions')
+          .update({ calendar_event_id: calendarEvent.id })
+          .eq('id', mission.id);
+      }
 
       toast.success('Mission deployed to schedule');
       setDeployTemplate(null);
-    } catch (error) {
-      toast.error('Failed to deploy mission');
+    } catch (error: any) {
+      console.error('Failed to deploy mission:', error);
+      toast.error(error?.message || 'Failed to deploy mission');
       throw error;
     }
   };
