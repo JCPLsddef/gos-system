@@ -46,11 +46,27 @@ export default function MasterListPage() {
   const [newMissionBattlefront, setNewMissionBattlefront] = useState<string>('__none__');
   const [newMissionDuration, setNewMissionDuration] = useState('60');
 
+  // Load missions from localStorage on mount
   useEffect(() => {
     if (user) {
+      const savedMissions = localStorage.getItem(`master-list-missions-${user.id}`);
+      if (savedMissions) {
+        try {
+          setMissions(JSON.parse(savedMissions));
+        } catch (error) {
+          console.error('Failed to load saved missions:', error);
+        }
+      }
       loadBattlefronts();
     }
   }, [user]);
+
+  // Save missions to localStorage whenever they change
+  useEffect(() => {
+    if (user && missions.length >= 0) {
+      localStorage.setItem(`master-list-missions-${user.id}`, JSON.stringify(missions));
+    }
+  }, [missions, user]);
 
   const loadBattlefronts = async () => {
     if (!user) return;
