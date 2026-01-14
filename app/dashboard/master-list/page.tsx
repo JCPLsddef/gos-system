@@ -16,7 +16,7 @@ import { getColorHex } from '@/lib/color-mapping';
 import { isPreviewMode } from '@/lib/preview-mode';
 import { mockBattlefronts } from '@/lib/mockData';
 import { createMission } from '@/lib/missions-service';
-import { syncMissionToCalendar } from '@/lib/mission-calendar-sync';
+import { syncMissionToCalendar, syncRecurringMissionToCalendar } from '@/lib/mission-calendar-sync';
 
 type Battlefront = {
   id: string;
@@ -196,16 +196,20 @@ export default function MasterListPage() {
           recurrence_days: recurrenceDays.toString(),
         });
 
-        // Sync to calendar
-        await syncMissionToCalendar({
-          id: newMission.id,
-          user_id: user.id,
-          title: newMission.title,
-          start_at: deployDateTime,
-          duration_minutes: deployMission.duration_minutes,
-          calendar_event_id: newMission.calendar_event_id,
-          battlefront_id: deployMission.battlefront_id,
-        });
+        // Sync recurring mission to calendar (creates multiple calendar events)
+        await syncRecurringMissionToCalendar(
+          {
+            id: newMission.id,
+            user_id: user.id,
+            title: newMission.title,
+            start_at: deployDateTime,
+            duration_minutes: deployMission.duration_minutes,
+            calendar_event_id: newMission.calendar_event_id,
+            battlefront_id: deployMission.battlefront_id,
+          },
+          recurrenceDays,
+          30 // Create 30 occurrences in calendar
+        );
 
         toast.success(`Mission deployed (repeats every ${recurrenceDays} day${recurrenceDays > 1 ? 's' : ''})!`);
       } else {

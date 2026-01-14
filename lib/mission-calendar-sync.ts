@@ -208,3 +208,52 @@ export async function createCalendarEventForMission(
 
   return event.id;
 }
+
+export async function syncRecurringMissionToCalendar(
+  mission: MissionWithCalendar,
+  recurrenceDays: number,
+  occurrences: number = 30
+): Promise<string[]> {
+  if (!mission.start_at) return [];
+
+  const eventIds: string[] = [];
+  const startDate = new Date(mission.start_at);
+
+  // Create calendar events for the next N occurrences
+  for (let i = 0; i < occurrences; i++) {
+    const occurrenceStart = new Date(startDate);
+    occurrenceStart.setDate(occurrenceStart.getDate() + (i * recurrenceDays));
+    
+    const occurrenceEnd = addMinutes(occurrenceStart, mission.duration_minutes || 60);
+
+    const { data: event, error } = await supabase
+      .from('calendar_events')
+      .insert({
+        user_id: mission.user_id,
+        title: mission.title,
+        start_time: occurrenceStart.toISOString(),
+        end_time: occurrenceEnd.toISOString(),
+        mission_id: mission.id,
+        battlefront_id: mission.battlefront_id,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error(`Error creating calendar event for occurrence ${i}:`, error);
+      continue;
+    }
+
+    eventIds.push(event.id);
+
+    // Update mission with the first calendar_event_id
+    if (i === 0 && event.id) {
+      await supabase
+        .from('missions')
+        .update({ calendar_event_id: event.id })
+        .eq('id', mission.id);
+    }
+  }
+
+  return eventIds;
+}
