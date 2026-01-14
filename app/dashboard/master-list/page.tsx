@@ -1,22 +1,42 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/lib/supabase';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { Trash2, Rocket, Search, X, Plus } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
+import { Plus, Check, Calendar, Target, Pencil, Trash2, X, ArrowLeft, Repeat, Sun } from 'lucide-react';
 import { DurationEditor } from '@/components/duration-editor';
-import { DeployMissionModal } from '@/components/deploy-mission-modal';
+import { NewMissionModal } from '@/components/new-mission-modal';
+import { DateTimePicker } from '@/components/date-time-picker';
 import { getColorHex } from '@/lib/color-mapping';
+import { isBefore, differenceInHours, format } from 'date-fns';
+import {
+  getTorontoDate,
+  getMinutesLeftTodayToronto,
+  formatDuration,
+  getCurrentWeekStart,
+  getWeekRange,
+} from '@/lib/date-utils';
+import {
+  getMissions,
+  createMission,
+  updateMission,
+  completeMission,
+  uncompleteMission,
+  deleteMission,
+  selectMissionsForDay,
+  type Mission,
+} from '@/lib/missions-service';
+import { syncMissionToCalendar, deleteMissionCalendarEvent } from '@/lib/mission-calendar-sync';
 import { isPreviewMode } from '@/lib/preview-mode';
-import { mockBattlefronts } from '@/lib/mockData';
-import { getMissionTemplates, type MissionTemplate } from '@/lib/mission-templates-service';
+import { mockMissions, mockBattlefronts } from '@/lib/mockData';
 
 type Battlefront = {
   id: string;
@@ -24,20 +44,47 @@ type Battlefront = {
   color?: string;
 };
 
+type FilterType = 'all' | 'active' | 'completed' | 'overdue' | 'due-soon';
+type ViewMode = 'week' | 'day';
+
 export default function MasterListPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { user } = useAuth();
-  const [templates, setTemplates] = useState<MissionTemplate[]>([]);
+  const [allMissions, setAllMissions] = useState<Mission[]>([]);
   const [battlefronts, setBattlefronts] = useState<Battlefront[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingTitle, setEditingTitle] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
-  const [deleteConfirm, setDeleteConfirm] = useState<MissionTemplate | null>(null);
-  const [deployTemplate, setDeployTemplate] = useState<MissionTemplate | null>(null);
-  const [newTemplateModal, setNewTemplateModal] = useState(false);
-  const [newTemplateTitle, setNewTemplateTitle] = useState('');
+  const [showNewModal, setShowNewModal] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<Mission | null>(null);
+  const [minutesLeftToday, setMinutesLeftToday] = useState(() => getMinutesLeftTodayToronto());
 
+  const urlFilter = searchParams.get('filter') as FilterType | null;
+  const urlBattlefront = searchParams.get('battlefront');
+  const urlMode = searchParams.get('mode') as ViewMode | null;
+  const [filter, setFilter] = useState<FilterType>('active');
   const [battlefrontFilter, setBattlefrontFilter] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [viewMode, setViewMode] = useState<ViewMode>('week');
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setMinutesLeftToday(getMinutesLeftTodayToronto());
+    }, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (urlFilter) {
+      setFilter(urlFilter);
+    }
+    if (urlBattlefront) {
+      setBattlefrontFilter(urlBattlefront);
+    }
+    if (urlMode) {
+      setViewMode(urlMode);
+    }
+  }, [urlFilter, urlBattlefront, urlMode]);
 
   useEffect(() => {
     if (user) {
@@ -51,82 +98,133 @@ export default function MasterListPage() {
     setLoading(true);
 
     if (isPreviewMode()) {
-      setTemplates([]);
+      setAllMissions(mockMissions as any);
       setBattlefronts(mockBattlefronts.map(bf => ({ id: bf.id, name: bf.name, color: 'blue' })));
       setLoading(false);
       return;
     }
 
     try {
-      const [templatesData, battlefrontsData] = await Promise.all([
-        getMissionTemplates(user.id),
+      const [missionsData, battlefrontsData] = await Promise.all([
+        getMissions(user.id),
         supabase.from('battlefronts').select('id, name, color').eq('user_id', user.id),
       ]);
 
-      setTemplates(templatesData);
+      setAllMissions(missionsData);
       setBattlefronts(battlefrontsData.data || []);
     } catch (error: any) {
-      console.error('Failed to load data:', error);
-      toast.error(error?.message || 'Failed to load templates');
+      toast.error('Failed to load missions');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCreateTemplate = async () => {
-    if (!user || !newTemplateTitle.trim()) return;
+  const now = getTorontoDate();
+  const weekStart = getCurrentWeekStart();
+  const { start: weekRangeStart, end: weekRangeEnd } = getWeekRange(weekStart);
+
+  const getMissionsForCurrentView = (): Mission[] => {
+    if (viewMode === 'day') {
+      return selectMissionsForDay(allMissions, now);
+    }
+    return allMissions.filter((m) => {
+      if (m.is_recurring) return true;
+      if (!m.start_at) return true;
+      const startDate = new Date(m.start_at);
+      return startDate >= weekRangeStart && startDate <= weekRangeEnd;
+    });
+  };
+
+  const missions = getMissionsForCurrentView();
+
+  const handleCreateMission = async (data: any) => {
+    if (!user) return;
 
     try {
-      const { data, error } = await supabase
-        .from('mission_templates')
-        .insert({
-          user_id: user.id,
-          title: newTemplateTitle.trim(),
-          description: '',
-          duration_minutes: 60,
-          color: '#3b82f6',
-        })
-        .select(`
-          *,
-          battlefront:battlefronts(id, name, color)
-        `)
-        .single();
+      const newMission = await createMission(user.id, data);
 
-      if (error) {
-        console.error('Create template error:', error);
-        throw error;
+      if (newMission.start_at) {
+        await syncMissionToCalendar({
+          id: newMission.id,
+          user_id: user.id,
+          title: newMission.title,
+          start_at: newMission.start_at,
+          duration_minutes: newMission.duration_minutes,
+          calendar_event_id: newMission.calendar_event_id,
+          battlefront_id: newMission.battlefront_id,
+        });
       }
 
-      setTemplates([data, ...templates]);
-      setNewTemplateTitle('');
-      setNewTemplateModal(false);
-      toast.success('Template created');
-    } catch (error: any) {
-      console.error('Failed to create template:', error);
-      toast.error(error?.message || 'Failed to create template');
+      setAllMissions([newMission, ...allMissions]);
+      toast.success('Mission created');
+    } catch (error) {
+      toast.error('Failed to create mission');
     }
   };
 
-  const handleUpdateTitle = async (templateId: string) => {
-    const template = templates.find((t) => t.id === templateId);
+  const handleCreateMultipleMissions = async (missionsData: any[]) => {
+    if (!user) return;
+
+    try {
+      const newMissions: Mission[] = [];
+
+      for (const data of missionsData) {
+        const newMission = await createMission(user.id, data);
+
+        if (newMission.start_at) {
+          await syncMissionToCalendar({
+            id: newMission.id,
+            user_id: user.id,
+            title: newMission.title,
+            start_at: newMission.start_at,
+            duration_minutes: newMission.duration_minutes,
+            calendar_event_id: newMission.calendar_event_id,
+            battlefront_id: newMission.battlefront_id,
+          });
+        }
+
+        newMissions.push(newMission);
+      }
+
+      setAllMissions([...newMissions, ...allMissions]);
+    } catch (error) {
+      toast.error('Failed to create missions');
+    }
+  };
+
+  const handleToggleComplete = async (mission: Mission) => {
+    const optimisticUpdate = {
+      ...mission,
+      completed_at: mission.completed_at ? null : new Date().toISOString(),
+    };
+
+    setAllMissions(allMissions.map((m) => (m.id === mission.id ? optimisticUpdate : m)));
+
+    try {
+      const updated = mission.completed_at
+        ? await uncompleteMission(mission.id)
+        : await completeMission(mission.id);
+
+      setAllMissions(allMissions.map((m) => (m.id === mission.id ? updated : m)));
+      toast.success(updated.completed_at ? 'Mission completed!' : 'Mission reopened');
+    } catch (error: any) {
+      setAllMissions(allMissions.map((m) => (m.id === mission.id ? mission : m)));
+      toast.error(error.message || 'Failed to update mission');
+    }
+  };
+
+  const handleUpdateTitle = async (missionId: string) => {
+    const mission = allMissions.find((m) => m.id === missionId);
     const newTitle = editTitle.trim();
 
-    if (!newTitle || template?.title === newTitle) {
+    if (!newTitle || mission?.title === newTitle) {
       setEditingTitle(null);
       return;
     }
 
     try {
-      const { data, error } = await supabase
-        .from('mission_templates')
-        .update({ title: newTitle })
-        .eq('id', templateId)
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      setTemplates(templates.map((t) => (t.id === templateId ? data : t)));
+      const updated = await updateMission(missionId, { title: newTitle });
+      setAllMissions(allMissions.map((m) => (m.id === missionId ? updated : m)));
       setEditingTitle(null);
       toast.success('Title updated');
     } catch (error) {
@@ -134,170 +232,161 @@ export default function MasterListPage() {
     }
   };
 
-  const handleUpdateBattlefront = async (templateId: string, battlefrontId: string) => {
-    const template = templates.find((t) => t.id === templateId);
-    const newBattlefrontId = battlefrontId === '__none__' ? null : battlefrontId;
-    if (!template || template.battlefront_id === newBattlefrontId) return;
+  const handleUpdateBattlefront = async (missionId: string, battlefrontId: string) => {
+    const mission = allMissions.find((m) => m.id === missionId);
+    const newBattlefrontId = battlefrontId === '__none__' ? undefined : battlefrontId;
+    if (!mission || mission.battlefront_id === newBattlefrontId) return;
 
     try {
-      const { data, error } = await supabase
-        .from('mission_templates')
-        .update({ battlefront_id: newBattlefrontId })
-        .eq('id', templateId)
-        .select(`
-          *,
-          battlefront:battlefronts(id, name, color)
-        `)
-        .single();
-
-      if (error) throw error;
-
-      setTemplates(templates.map((t) => (t.id === templateId ? data : t)));
+      const updated = await updateMission(missionId, {
+        battlefront_id: newBattlefrontId,
+      });
+      setAllMissions(allMissions.map((m) => (m.id === missionId ? updated : m)));
       toast.success('Battlefront updated');
     } catch (error) {
       toast.error('Failed to update battlefront');
     }
   };
 
-  const handleUpdateDuration = async (templateId: string, duration: number) => {
+  const handleUpdateDuration = async (missionId: string, duration: number) => {
+    const mission = allMissions.find((m) => m.id === missionId);
+    if (!mission) return;
+
     try {
-      const { data, error } = await supabase
-        .from('mission_templates')
-        .update({ duration_minutes: duration })
-        .eq('id', templateId)
-        .select()
-        .single();
+      const updated = await updateMission(missionId, { duration_minutes: duration });
 
-      if (error) throw error;
+      if (updated.start_at && user) {
+        await syncMissionToCalendar({
+          id: updated.id,
+          user_id: user.id,
+          title: updated.title,
+          start_at: updated.start_at,
+          duration_minutes: updated.duration_minutes,
+          calendar_event_id: updated.calendar_event_id,
+          battlefront_id: updated.battlefront_id,
+        });
+      }
 
-      setTemplates(templates.map((t) => (t.id === templateId ? data : t)));
+      setAllMissions(allMissions.map((m) => (m.id === missionId ? updated : m)));
       toast.success('Duration updated');
     } catch (error) {
       toast.error('Failed to update duration');
     }
   };
 
-  const handleDeployTemplate = async (
-    templateId: string,
-    data: { start_at: string; duration_minutes: number; due_date?: string | null }
-  ) => {
-    const template = templates.find((t) => t.id === templateId);
-    if (!template || !user) return;
+  const handleUpdateStartAt = async (missionId: string, startAt: string | null) => {
+    const mission = allMissions.find((m) => m.id === missionId);
+    if (!mission || !user) return;
+
+    const optimistic = { ...mission, start_at: startAt };
+    setAllMissions(allMissions.map((m) => (m.id === missionId ? optimistic : m)));
 
     try {
-      const { data: mission, error } = await supabase
-        .from('missions')
-        .insert({
-          user_id: user.id,
-          title: template.title,
-          battlefront_id: template.battlefront_id,
-          duration_minutes: data.duration_minutes,
-          start_at: data.start_at,
-          due_date: data.due_date,
-        })
-        .select()
-        .single();
+      const updated = await updateMission(missionId, { start_at: startAt || undefined });
 
-      if (error) {
-        console.error('Create mission error:', error);
-        throw error;
-      }
-
-      const startDate = new Date(data.start_at);
-      const endDate = new Date(startDate.getTime() + data.duration_minutes * 60000);
-
-      const { error: calendarError } = await supabase.from('calendar_events').insert({
+      await syncMissionToCalendar({
+        id: updated.id,
         user_id: user.id,
-        mission_id: mission.id,
-        title: mission.title,
-        start_time: startDate.toISOString(),
-        end_time: endDate.toISOString(),
-        battlefront_id: template.battlefront_id,
+        title: updated.title,
+        start_at: updated.start_at,
+        duration_minutes: updated.duration_minutes,
+        calendar_event_id: updated.calendar_event_id,
+        battlefront_id: updated.battlefront_id,
       });
 
-      if (calendarError) {
-        console.error('Create calendar event error:', calendarError);
-      }
-
-      // Update mission with calendar_event_id
-      const { data: calendarEvent } = await supabase
-        .from('calendar_events')
-        .select('id')
-        .eq('mission_id', mission.id)
-        .single();
-
-      if (calendarEvent) {
-        await supabase
-          .from('missions')
-          .update({ calendar_event_id: calendarEvent.id })
-          .eq('id', mission.id);
-      }
-
-      toast.success('Mission deployed to schedule');
-      setDeployTemplate(null);
-    } catch (error: any) {
-      console.error('Failed to deploy mission:', error);
-      toast.error(error?.message || 'Failed to deploy mission');
-      throw error;
-    }
-  };
-
-  const handleDeleteTemplate = async (template: MissionTemplate) => {
-    try {
-      const { error } = await supabase
-        .from('mission_templates')
-        .delete()
-        .eq('id', template.id);
-
-      if (error) throw error;
-
-      setTemplates(templates.filter((t) => t.id !== template.id));
-      setDeleteConfirm(null);
-      toast.success('Template deleted');
+      await loadData();
+      toast.success(startAt ? 'Mission scheduled' : 'Schedule cleared');
     } catch (error) {
-      toast.error('Failed to delete template');
+      setAllMissions(allMissions.map((m) => (m.id === missionId ? mission : m)));
+      toast.error('Failed to update schedule');
     }
   };
 
-  const getBattlefrontColor = (battlefrontId: string | null): string | undefined => {
+  const handleDeleteMission = async (mission: Mission) => {
+    try {
+      if (mission.calendar_event_id) {
+        await deleteMissionCalendarEvent(mission.id);
+      }
+      await deleteMission(mission.id);
+      setAllMissions(allMissions.filter((m) => m.id !== mission.id));
+      setDeleteConfirm(null);
+      toast.success('Mission deleted');
+    } catch (error) {
+      toast.error('Failed to delete mission');
+    }
+  };
+
+  const getBattlefrontColor = (battlefrontId: string | null | undefined): string | undefined => {
     if (!battlefrontId) return undefined;
     const bf = battlefronts.find((b) => b.id === battlefrontId);
     return bf?.color;
   };
 
   const clearFilters = () => {
+    setFilter('active');
     setBattlefrontFilter(null);
-    setSearchQuery('');
+    router.push('/dashboard/master-list');
   };
 
-  const filteredTemplates = templates
-    .filter((t) => {
+  const handleViewModeChange = (mode: ViewMode) => {
+    setViewMode(mode);
+    const params = new URLSearchParams(window.location.search);
+    if (mode === 'day') {
+      params.set('mode', 'day');
+    } else {
+      params.delete('mode');
+    }
+    router.push(`/dashboard/master-list${params.toString() ? `?${params.toString()}` : ''}`);
+  };
+
+  const filteredMissions = missions
+    .filter((m) => {
       if (battlefrontFilter) {
         if (battlefrontFilter === 'unassigned') {
-          if (t.battlefront_id) return false;
+          if (m.battlefront_id) return false;
         } else {
-          if (t.battlefront_id !== battlefrontFilter) return false;
+          if (m.battlefront_id !== battlefrontFilter) return false;
         }
+      }
+
+      if (filter === 'active') return !m.completed_at;
+      if (filter === 'completed') return !!m.completed_at;
+      if (filter === 'overdue') {
+        if (m.completed_at) return false;
+        if (!m.start_at) return false;
+        return isBefore(new Date(m.start_at), now);
+      }
+      if (filter === 'due-soon') {
+        if (m.completed_at) return false;
+        if (!m.start_at) return false;
+        const startDate = new Date(m.start_at);
+        return !isBefore(startDate, now) && differenceInHours(startDate, now) <= 24;
       }
       return true;
     })
-    .filter((t) => {
-      if (searchQuery.trim()) {
-        return t.title.toLowerCase().includes(searchQuery.toLowerCase());
-      }
-      return true;
+    .sort((a, b) => {
+      if (!a.start_at && !b.start_at) return 0;
+      if (!a.start_at) return 1;
+      if (!b.start_at) return -1;
+      return new Date(a.start_at).getTime() - new Date(b.start_at).getTime();
     });
 
-  const hasActiveFilters = battlefrontFilter || searchQuery.trim();
-  const activeBattlefront =
-    battlefrontFilter && battlefrontFilter !== 'unassigned'
-      ? battlefronts.find((bf) => bf.id === battlefrontFilter)
-      : null;
+  const hasActiveFilters = battlefrontFilter || filter !== 'active';
+  const activeBattlefront = battlefrontFilter && battlefrontFilter !== 'unassigned'
+    ? battlefronts.find(bf => bf.id === battlefrontFilter)
+    : null;
+
+  const stats = {
+    total: missions.length,
+    completed: missions.filter((m) => m.completed_at).length,
+    active: missions.filter((m) => !m.completed_at).length,
+    scheduled: missions.filter((m) => m.start_at && !m.completed_at).length,
+  };
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-96">
-        <div className="text-white text-lg">Loading Mission Templates...</div>
+        <div className="text-white text-lg">Loading missions...</div>
       </div>
     );
   }
@@ -308,47 +397,56 @@ export default function MasterListPage() {
         <div>
           <h1 className="text-2xl sm:text-4xl font-bold text-white">MASTER LIST</h1>
           <p className="text-slate-400 text-sm sm:text-lg mt-1">
-            Mission template library
+            {viewMode === 'day' ? "Today's missions" : 'All missions this week'}
           </p>
         </div>
-        <Button
-          onClick={() => setNewTemplateModal(true)}
-          className="bg-green-600 hover:bg-green-700"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          New Template
-        </Button>
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2 bg-slate-800/50 p-1 rounded-lg border border-slate-700">
+            <Button
+              variant={viewMode === 'week' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => handleViewModeChange('week')}
+              className={viewMode === 'week' ? 'bg-blue-600 hover:bg-blue-700' : 'text-slate-400 hover:text-white'}
+            >
+              <Calendar className="w-4 h-4 mr-1.5" />
+              Week
+            </Button>
+            <Button
+              variant={viewMode === 'day' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => handleViewModeChange('day')}
+              className={viewMode === 'day' ? 'bg-blue-600 hover:bg-blue-700' : 'text-slate-400 hover:text-white'}
+            >
+              <Sun className="w-4 h-4 mr-1.5" />
+              Day
+            </Button>
+          </div>
+          <Button onClick={() => setShowNewModal(true)} className="bg-blue-600 hover:bg-blue-700">
+            <Plus className="w-4 h-4 mr-2" />
+            New Mission
+          </Button>
+        </div>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <Input
-            placeholder="Search templates..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="bg-slate-800 border-slate-600 text-white pl-10"
-          />
-        </div>
-        <Select value={battlefrontFilter || '__all__'} onValueChange={(v) => setBattlefrontFilter(v === '__all__' ? null : v)}>
-          <SelectTrigger className="bg-slate-800 border-slate-600 text-white w-full sm:w-48">
-            <SelectValue placeholder="All Battlefronts" />
-          </SelectTrigger>
-          <SelectContent className="bg-slate-800 border-slate-700">
-            <SelectItem value="__all__" className="text-white">
-              All Battlefronts
-            </SelectItem>
-            <SelectItem value="unassigned" className="text-white">
-              Unassigned
-            </SelectItem>
-            {battlefronts.map((bf) => (
-              <SelectItem key={bf.id} value={bf.id} className="text-white">
-                {bf.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      {viewMode === 'day' && (
+        <Card className="bg-slate-800/30 border-slate-700 p-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <Sun className="w-5 h-5 text-amber-400" />
+              <div>
+                <div className="text-white font-semibold">{format(now, 'EEEE, MMMM d')}</div>
+                <div className="text-slate-400 text-sm">Showing only today&apos;s scheduled missions</div>
+              </div>
+            </div>
+            <div className="text-left sm:text-right">
+              <div className={`text-lg font-bold ${minutesLeftToday > 0 ? 'text-blue-400' : 'text-slate-500'}`}>
+                {minutesLeftToday > 0 ? formatDuration(minutesLeftToday) : '0m'}
+              </div>
+              <div className="text-slate-400 text-xs">Time left today (until 10 PM)</div>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {hasActiveFilters && (
         <div className="flex items-center gap-3 p-3 bg-slate-800/50 rounded-lg border border-slate-700 flex-wrap">
@@ -373,61 +471,145 @@ export default function MasterListPage() {
               </button>
             </Badge>
           )}
-          {searchQuery.trim() && (
+          {filter !== 'active' && (
             <Badge className="bg-slate-700 text-white flex items-center gap-1">
-              Search: {searchQuery.substring(0, 20)}
-              <button onClick={() => setSearchQuery('')} className="ml-1 hover:text-red-400">
+              {filter === 'overdue' && 'Overdue'}
+              {filter === 'due-soon' && 'Due Soon'}
+              {filter === 'completed' && 'Completed'}
+              {filter === 'all' && 'All'}
+              <button onClick={() => setFilter('active')} className="ml-1 hover:text-red-400">
                 <X className="w-3 h-3" />
               </button>
             </Badge>
           )}
-          <Button variant="ghost" size="sm" onClick={clearFilters} className="text-slate-400 hover:text-white ml-auto">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={clearFilters}
+            className="text-slate-400 hover:text-white ml-auto"
+          >
+            <ArrowLeft className="w-4 h-4 mr-1" />
             Clear all
           </Button>
         </div>
       )}
+
+      <div className="flex flex-wrap gap-2">
+        <Button
+          variant={filter === 'active' && !battlefrontFilter ? 'default' : 'outline'}
+          onClick={() => { setFilter('active'); setBattlefrontFilter(null); }}
+          className={filter === 'active' && !battlefrontFilter ? 'bg-blue-600' : 'bg-slate-800 border-slate-600 text-white'}
+          size="sm"
+        >
+          Active ({stats.active})
+        </Button>
+        <Button
+          variant={filter === 'completed' ? 'default' : 'outline'}
+          onClick={() => setFilter('completed')}
+          className={filter === 'completed' ? 'bg-blue-600' : 'bg-slate-800 border-slate-600 text-white'}
+          size="sm"
+        >
+          Completed ({stats.completed})
+        </Button>
+        <Button
+          variant={filter === 'overdue' ? 'default' : 'outline'}
+          onClick={() => setFilter('overdue')}
+          className={filter === 'overdue' ? 'bg-red-600' : 'bg-slate-800 border-slate-600 text-white'}
+          size="sm"
+        >
+          Overdue
+        </Button>
+        <Button
+          variant={filter === 'due-soon' ? 'default' : 'outline'}
+          onClick={() => setFilter('due-soon')}
+          className={filter === 'due-soon' ? 'bg-amber-600' : 'bg-slate-800 border-slate-600 text-white'}
+          size="sm"
+        >
+          Due Soon
+        </Button>
+        <Button
+          variant={filter === 'all' ? 'default' : 'outline'}
+          onClick={() => setFilter('all')}
+          className={filter === 'all' ? 'bg-blue-600' : 'bg-slate-800 border-slate-600 text-white'}
+          size="sm"
+        >
+          All ({stats.total})
+        </Button>
+      </div>
 
       <Card className="bg-slate-900/50 border-slate-700 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-slate-800/50 border-b border-slate-700">
               <tr>
-                <th className="text-left p-3 sm:p-4 text-slate-400 font-semibold text-sm">Mission Template</th>
-                <th className="text-left p-3 sm:p-4 text-slate-400 font-semibold text-sm hidden md:table-cell">
-                  Battlefront
-                </th>
-                <th className="text-left p-3 sm:p-4 text-slate-400 font-semibold text-sm hidden sm:table-cell">
-                  Duration
-                </th>
-                <th className="text-left p-3 sm:p-4 text-slate-400 font-semibold w-32 text-sm">Actions</th>
+                <th className="text-left p-3 sm:p-4 text-slate-400 font-semibold w-12"></th>
+                <th className="text-left p-3 sm:p-4 text-slate-400 font-semibold text-sm">Mission</th>
+                <th className="text-left p-3 sm:p-4 text-slate-400 font-semibold text-sm hidden md:table-cell">Battlefront</th>
+                <th className="text-left p-3 sm:p-4 text-slate-400 font-semibold text-sm hidden lg:table-cell">Scheduled For</th>
+                <th className="text-left p-3 sm:p-4 text-slate-400 font-semibold text-sm hidden sm:table-cell">Duration</th>
+                <th className="text-left p-3 sm:p-4 text-slate-400 font-semibold w-24 text-sm">Status</th>
+                <th className="text-left p-3 sm:p-4 text-slate-400 font-semibold w-20 text-sm">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-700">
-              {filteredTemplates.length === 0 ? (
+              {filteredMissions.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="p-8 text-center text-slate-400">
-                    {!searchQuery && !battlefrontFilter && 'No templates. Click "New Template" to create one.'}
-                    {(searchQuery || battlefrontFilter) && 'No templates matching filters'}
+                  <td colSpan={7} className="p-8 text-center text-slate-400">
+                    {filter === 'active' && !battlefrontFilter && `No active missions ${viewMode === 'day' ? 'today' : 'this week'}`}
+                    {filter === 'completed' && 'No completed missions'}
+                    {filter === 'overdue' && 'No overdue missions - great job!'}
+                    {filter === 'due-soon' && 'No missions due soon'}
+                    {filter === 'all' && !battlefrontFilter && `No missions ${viewMode === 'day' ? 'today' : 'this week'}. Click "New Mission" to create one.`}
+                    {battlefrontFilter && 'No missions matching this filter'}
                   </td>
                 </tr>
               ) : (
-                filteredTemplates.map((template) => {
-                  const bfColor = getBattlefrontColor(template.battlefront_id);
-
+                filteredMissions.map((mission) => {
+                  const bfColor = getBattlefrontColor(mission.battlefront_id);
                   return (
                     <tr
-                      key={template.id}
-                      className="hover:bg-slate-800/30 transition-all"
+                      key={mission.id}
+                      className={`hover:bg-slate-800/30 transition-all ${
+                        mission.completed_at ? 'opacity-60' : ''
+                      }`}
                     >
                       <td className="p-3 sm:p-4">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleToggleComplete(mission);
+                          }}
+                          className={`w-6 h-6 rounded border-2 flex items-center justify-center transition-all cursor-pointer ${
+                            mission.completed_at
+                              ? 'bg-green-500 border-green-500 scale-110'
+                              : 'border-slate-600 hover:border-blue-500'
+                          }`}
+                          aria-label={mission.completed_at ? 'Mark as incomplete' : 'Mark as complete'}
+                        >
+                          {mission.completed_at && <Check className="w-4 h-4 text-white" />}
+                        </button>
+                      </td>
+                      <td className="p-3 sm:p-4">
                         <div className="flex items-center gap-2">
-                          {editingTitle === template.id ? (
+                          {mission.is_recurring && (
+                            <span title="Daily mission - resets at midnight">
+                              <Repeat className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                            </span>
+                          )}
+                          {mission.calendar_event_id && !mission.is_recurring && (
+                            <span title="Linked to calendar">
+                              <Target className="w-4 h-4 text-blue-400 flex-shrink-0" />
+                            </span>
+                          )}
+                          {editingTitle === mission.id ? (
                             <Input
                               value={editTitle}
                               onChange={(e) => setEditTitle(e.target.value)}
-                              onBlur={() => handleUpdateTitle(template.id)}
+                              onBlur={() => handleUpdateTitle(mission.id)}
                               onKeyDown={(e) => {
-                                if (e.key === 'Enter') handleUpdateTitle(template.id);
+                                if (e.key === 'Enter') handleUpdateTitle(mission.id);
                                 if (e.key === 'Escape') setEditingTitle(null);
                               }}
                               className="bg-slate-800 border-slate-600 text-white -my-2"
@@ -436,13 +618,26 @@ export default function MasterListPage() {
                           ) : (
                             <span
                               onClick={() => {
-                                setEditingTitle(template.id);
-                                setEditTitle(template.title);
+                                setEditingTitle(mission.id);
+                                setEditTitle(mission.title);
                               }}
-                              className="cursor-pointer hover:text-blue-400 transition-colors text-sm sm:text-base text-white font-medium"
+                              className={`cursor-pointer hover:text-blue-400 transition-colors text-sm sm:text-base ${
+                                mission.completed_at ? 'line-through text-slate-400' : 'text-white font-medium'
+                              }`}
                             >
-                              {template.title}
+                              {mission.title}
                             </span>
+                          )}
+                        </div>
+                        <div className="md:hidden mt-1">
+                          {bfColor && (
+                            <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                              <div
+                                className="w-2 h-2 rounded-full flex-shrink-0"
+                                style={{ backgroundColor: getColorHex(bfColor) }}
+                              />
+                              {mission.battlefront?.name || 'Unassigned'}
+                            </div>
                           )}
                         </div>
                       </td>
@@ -455,12 +650,12 @@ export default function MasterListPage() {
                             />
                           )}
                           <Select
-                            value={template.battlefront_id || '__none__'}
-                            onValueChange={(value) => handleUpdateBattlefront(template.id, value)}
+                            value={mission.battlefront_id || '__none__'}
+                            onValueChange={(value) => handleUpdateBattlefront(mission.id, value)}
                           >
                             <SelectTrigger className="bg-slate-800 border-slate-600 text-white w-32 lg:w-40 text-sm">
-                              <SelectValue placeholder="Select">
-                                {template.battlefront?.name || 'Unassigned'}
+                              <SelectValue placeholder="Select battlefront">
+                                {mission.battlefront?.name || 'Unassigned'}
                               </SelectValue>
                             </SelectTrigger>
                             <SelectContent className="bg-slate-800 border-slate-700">
@@ -469,34 +664,73 @@ export default function MasterListPage() {
                               </SelectItem>
                               {battlefronts.map((bf) => (
                                 <SelectItem key={bf.id} value={bf.id} className="text-white">
-                                  {bf.name}
+                                  <div className="flex items-center gap-2">
+                                    {bf.color && (
+                                      <div
+                                        className="w-2 h-2 rounded-full"
+                                        style={{ backgroundColor: getColorHex(bf.color) }}
+                                      />
+                                    )}
+                                    {bf.name}
+                                  </div>
                                 </SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
                         </div>
                       </td>
+                      <td className="p-3 sm:p-4 hidden lg:table-cell">
+                        <DateTimePicker
+                          value={mission.start_at}
+                          onChange={(value) => handleUpdateStartAt(mission.id, value)}
+                          placeholder="Schedule mission"
+                        />
+                      </td>
                       <td className="p-3 sm:p-4 hidden sm:table-cell">
                         <DurationEditor
-                          initialDuration={template.duration_minutes}
-                          onSave={(duration) => handleUpdateDuration(template.id, duration)}
+                          initialDuration={mission.duration_minutes}
+                          onSave={(duration) => handleUpdateDuration(mission.id, duration)}
                         />
+                      </td>
+                      <td className="p-3 sm:p-4">
+                        <div className="flex flex-col gap-1">
+                          {mission.is_recurring && (
+                            <Badge className="bg-amber-600 text-white flex items-center gap-1 w-fit text-xs">
+                              <Repeat className="w-3 h-3" />
+                              Daily
+                            </Badge>
+                          )}
+                          {mission.completed_at ? (
+                            <Badge className="bg-slate-600 text-white text-xs">Done</Badge>
+                          ) : mission.start_at && !mission.is_recurring ? (
+                            <Badge className="bg-green-600 text-white flex items-center gap-1 w-fit text-xs">
+                              <Calendar className="w-3 h-3" />
+                              Scheduled
+                            </Badge>
+                          ) : !mission.is_recurring ? (
+                            <Badge variant="outline" className="border-slate-600 text-slate-400 text-xs">
+                              Not scheduled
+                            </Badge>
+                          ) : null}
+                        </div>
                       </td>
                       <td className="p-3 sm:p-4">
                         <div className="flex items-center gap-1">
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => setDeployTemplate(template)}
-                            className="h-8 w-8 text-blue-400 hover:text-blue-300 hover:bg-slate-700"
-                            title="Deploy to schedule"
+                            onClick={() => {
+                              setEditingTitle(mission.id);
+                              setEditTitle(mission.title);
+                            }}
+                            className="h-8 w-8 text-slate-400 hover:text-white hover:bg-slate-700"
                           >
-                            <Rocket className="w-4 h-4" />
+                            <Pencil className="w-4 h-4" />
                           </Button>
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => setDeleteConfirm(template)}
+                            onClick={() => setDeleteConfirm(mission)}
                             className="h-8 w-8 text-slate-400 hover:text-red-400 hover:bg-slate-700"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -512,81 +746,52 @@ export default function MasterListPage() {
         </div>
       </Card>
 
-      <Card className="bg-slate-900/50 border-slate-700 p-4 sm:p-6">
-        <div className="text-center">
-          <div className="text-2xl sm:text-3xl font-bold text-white">{templates.length}</div>
-          <div className="text-slate-400 text-xs sm:text-sm mt-1">Mission Templates</div>
-        </div>
-      </Card>
-
-      {deployTemplate && (
-        <DeployMissionModal
-          isOpen={true}
-          onClose={() => setDeployTemplate(null)}
-          mission={{
-            id: deployTemplate.id,
-            title: deployTemplate.title,
-            duration_minutes: deployTemplate.duration_minutes,
-            battlefront_id: deployTemplate.battlefront_id,
-          } as any}
-          onDeploy={handleDeployTemplate}
-        />
-      )}
-
-      <Dialog open={newTemplateModal} onOpenChange={setNewTemplateModal}>
-        <DialogContent className="bg-slate-900 border-slate-700 text-white">
-          <DialogHeader>
-            <DialogTitle>Create New Template</DialogTitle>
-            <DialogDescription className="text-slate-400">
-              Create a new mission template that you can deploy multiple times
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div>
-              <label className="text-sm text-slate-400 mb-2 block">Template Name</label>
-              <Input
-                value={newTemplateTitle}
-                onChange={(e) => setNewTemplateTitle(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleCreateTemplate();
-                }}
-                placeholder="e.g., Morning Routine, Deep Work Session"
-                className="bg-slate-800 border-slate-600 text-white"
-                autoFocus
-              />
-            </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+        <Card className="bg-slate-900/50 border-slate-700 p-4 sm:p-6">
+          <div className="text-center">
+            <div className="text-2xl sm:text-3xl font-bold text-white">{stats.total}</div>
+            <div className="text-slate-400 text-xs sm:text-sm mt-1">Total</div>
           </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setNewTemplateModal(false);
-                setNewTemplateTitle('');
-              }}
-              className="bg-slate-800 border-slate-600 hover:bg-slate-700"
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleCreateTemplate}
-              disabled={!newTemplateTitle.trim()}
-              className="bg-green-600 hover:bg-green-700"
-            >
-              Create Template
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        </Card>
+        <Card className="bg-slate-900/50 border-slate-700 p-4 sm:p-6">
+          <div className="text-center">
+            <div className="text-2xl sm:text-3xl font-bold text-green-500">{stats.completed}</div>
+            <div className="text-slate-400 text-xs sm:text-sm mt-1">Completed</div>
+          </div>
+        </Card>
+        <Card className="bg-slate-900/50 border-slate-700 p-4 sm:p-6">
+          <div className="text-center">
+            <div className="text-2xl sm:text-3xl font-bold text-blue-500">{stats.active}</div>
+            <div className="text-slate-400 text-xs sm:text-sm mt-1">Active</div>
+          </div>
+        </Card>
+        <Card className="bg-slate-900/50 border-slate-700 p-4 sm:p-6">
+          <div className="text-center">
+            <div className="text-2xl sm:text-3xl font-bold text-emerald-500">{stats.scheduled}</div>
+            <div className="text-slate-400 text-xs sm:text-sm mt-1">Scheduled</div>
+          </div>
+        </Card>
+      </div>
+
+      <NewMissionModal
+        isOpen={showNewModal}
+        onClose={() => setShowNewModal(false)}
+        onCreate={handleCreateMission}
+        onCreateMultiple={handleCreateMultipleMissions}
+        battlefronts={battlefronts}
+      />
 
       <Dialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
         <DialogContent className="bg-slate-900 border-slate-700 text-white">
           <DialogHeader>
-            <DialogTitle>Delete Template</DialogTitle>
+            <DialogTitle>Delete Mission</DialogTitle>
             <DialogDescription className="text-slate-400">
               Are you sure you want to delete &quot;{deleteConfirm?.title}&quot;? This action cannot be undone.
-              <span className="block mt-2 text-yellow-400">
-                Note: This will not delete any missions created from this template.
-              </span>
+              {deleteConfirm?.calendar_event_id && (
+                <span className="block mt-2 text-amber-400">
+                  This will also remove the linked calendar event.
+                </span>
+              )}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -597,7 +802,10 @@ export default function MasterListPage() {
             >
               Cancel
             </Button>
-            <Button onClick={() => deleteConfirm && handleDeleteTemplate(deleteConfirm)} className="bg-red-600 hover:bg-red-700">
+            <Button
+              onClick={() => deleteConfirm && handleDeleteMission(deleteConfirm)}
+              className="bg-red-600 hover:bg-red-700"
+            >
               Delete
             </Button>
           </DialogFooter>
