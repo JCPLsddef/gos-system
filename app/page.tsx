@@ -17,7 +17,7 @@ export default async function Home() {
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
   // Server-side auth check using cookies
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
 
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
     cookies: {
