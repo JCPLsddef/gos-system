@@ -2,16 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-/* 🔴 TEST DEPLOY - TOUT EN ROUGE POUR VÉRIFIER LE PUSH 🔴 */
-body {
-  background: #ff0000 !important;
-  filter: hue-rotate(0deg) saturate(300%) !important;
-}
-
-* {
-  border-color: #ff0000 !important;
-}
-
 :root {
   --foreground-rgb: 0, 0, 0;
   --background-start-rgb: 214, 219, 220;
