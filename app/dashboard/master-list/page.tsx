@@ -65,9 +65,13 @@ export default function MasterListPage() {
         supabase.from('battlefronts').select('id, name, color').eq('user_id', user.id),
       ]);
 
+      console.log('Loaded battlefronts:', battlefrontsData.data);
+      console.log('Loaded templates:', templatesData);
+
       setTemplates(templatesData);
       setBattlefronts(battlefrontsData.data || []);
     } catch (error: any) {
+      console.error('Failed to load data:', error);
       toast.error('Failed to load templates');
     } finally {
       setLoading(false);
@@ -81,12 +85,19 @@ export default function MasterListPage() {
     }
 
     try {
+      console.log('Creating template with:', {
+        title: newTemplateTitle.trim(),
+        battlefront_id: newTemplateBattlefront === '__none__' ? undefined : newTemplateBattlefront,
+        duration_minutes: parseInt(newTemplateDuration) || 60,
+      });
+
       const newTemplate = await createMissionTemplate(user.id, {
         title: newTemplateTitle.trim(),
         battlefront_id: newTemplateBattlefront === '__none__' ? undefined : newTemplateBattlefront,
         duration_minutes: parseInt(newTemplateDuration) || 60,
       });
 
+      console.log('Template created:', newTemplate);
       setTemplates([newTemplate, ...templates]);
       setNewTemplateTitle('');
       setNewTemplateBattlefront('__none__');
@@ -94,7 +105,8 @@ export default function MasterListPage() {
       setShowNewModal(false);
       toast.success('Template created');
     } catch (error: any) {
-      toast.error('Failed to create template');
+      console.error('Failed to create template:', error);
+      toast.error(error.message || 'Failed to create template');
     }
   };
 
@@ -347,7 +359,15 @@ export default function MasterListPage() {
                   <SelectItem value="__none__" className="text-white">No battlefront</SelectItem>
                   {battlefronts.map((bf) => (
                     <SelectItem key={bf.id} value={bf.id} className="text-white">
-                      {bf.name}
+                      <div className="flex items-center gap-2">
+                        {bf.color && (
+                          <div
+                            className="w-2 h-2 rounded-full"
+                            style={{ backgroundColor: getColorHex(bf.color) }}
+                          />
+                        )}
+                        {bf.name}
+                      </div>
                     </SelectItem>
                   ))}
                 </SelectContent>
