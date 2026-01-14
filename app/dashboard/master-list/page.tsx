@@ -16,25 +16,12 @@ import { DeployMissionModal } from '@/components/deploy-mission-modal';
 import { getColorHex } from '@/lib/color-mapping';
 import { isPreviewMode } from '@/lib/preview-mode';
 import { mockBattlefronts } from '@/lib/mockData';
-import { getMissionTemplates } from '@/lib/mission-templates-service';
+import { getMissionTemplates, type MissionTemplate } from '@/lib/mission-templates-service';
 
 type Battlefront = {
   id: string;
   name: string;
   color?: string;
-};
-
-type MissionTemplate = {
-  id: string;
-  user_id: string;
-  title: string;
-  description: string;
-  battlefront_id: string | null;
-  duration_minutes: number;
-  color: string;
-  created_at: string;
-  updated_at: string;
-  battlefront?: Battlefront;
 };
 
 export default function MasterListPage() {
