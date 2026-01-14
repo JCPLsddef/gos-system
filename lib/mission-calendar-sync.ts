@@ -216,14 +216,43 @@ export async function syncRecurringMissionToCalendar(
 ): Promise<string[]> {
   if (!mission.start_at) return [];
 
+  console.log('🔄 Syncing recurring mission:', {
+    missionId: mission.id,
+    title: mission.title,
+    startAt: mission.start_at,
+    recurrenceDays,
+    occurrences
+  });
+
+  // First, delete any existing calendar events for this mission
+  const { data: deletedEvents, error: deleteError } = await supabase
+    .from('calendar_events')
+    .delete()
+    .eq('mission_id', mission.id)
+    .select();
+
+  console.log('🗑️ Deleted existing events:', deletedEvents?.length || 0);
+
+  if (deleteError) {
+    console.error('Error deleting old events:', deleteError);
+  }
+
   const eventIds: string[] = [];
   const baseStartDate = new Date(mission.start_at);
+
+  console.log('📅 Base start date:', baseStartDate.toISOString());
 
   // Create calendar events for the next N occurrences
   for (let i = 0; i < occurrences; i++) {
     // Add days using date-fns for reliable date arithmetic
     const occurrenceStart = addDays(baseStartDate, i * recurrenceDays);
     const occurrenceEnd = addMinutes(occurrenceStart, mission.duration_minutes || 60);
+
+    console.log(`📍 Creating occurrence ${i}:`, {
+      dayOffset: i * recurrenceDays,
+      startTime: occurrenceStart.toISOString(),
+      endTime: occurrenceEnd.toISOString()
+    });
 
     const { data: event, error } = await supabase
       .from('calendar_events')
@@ -239,10 +268,11 @@ export async function syncRecurringMissionToCalendar(
       .single();
 
     if (error) {
-      console.error(`Error creating calendar event for occurrence ${i}:`, error);
+      console.error(`❌ Error creating calendar event for occurrence ${i}:`, error);
       continue;
     }
 
+    console.log(`✅ Created event ${i}:`, event.id);
     eventIds.push(event.id);
 
     // Update mission with the first calendar_event_id
@@ -254,5 +284,6 @@ export async function syncRecurringMissionToCalendar(
     }
   }
 
+  console.log(`✅ Created ${eventIds.length} calendar events for recurring mission`);
   return eventIds;
 }
