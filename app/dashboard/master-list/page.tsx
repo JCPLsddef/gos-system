@@ -16,6 +16,7 @@ import { DeployMissionModal } from '@/components/deploy-mission-modal';
 import { getColorHex } from '@/lib/color-mapping';
 import { isPreviewMode } from '@/lib/preview-mode';
 import { mockBattlefronts } from '@/lib/mockData';
+import { getMissionTemplates } from '@/lib/mission-templates-service';
 
 type Battlefront = {
   id: string;
@@ -71,27 +72,11 @@ export default function MasterListPage() {
 
     try {
       const [templatesData, battlefrontsData] = await Promise.all([
-        supabase
-          .from('mission_templates')
-          .select(`
-            *,
-            battlefront:battlefronts(id, name, color)
-          `)
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false }),
+        getMissionTemplates(user.id),
         supabase.from('battlefronts').select('id, name, color').eq('user_id', user.id),
       ]);
 
-      if (templatesData.error) {
-        console.error('Load templates error:', templatesData.error);
-        throw templatesData.error;
-      }
-      if (battlefrontsData.error) {
-        console.error('Load battlefronts error:', battlefrontsData.error);
-        throw battlefrontsData.error;
-      }
-
-      setTemplates(templatesData.data || []);
+      setTemplates(templatesData);
       setBattlefronts(battlefrontsData.data || []);
     } catch (error: any) {
       console.error('Failed to load data:', error);
