@@ -9,11 +9,14 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { Plus, Trash2, Check } from 'lucide-react';
+import { Plus, Trash2, Calendar } from 'lucide-react';
 import { DurationEditor } from '@/components/duration-editor';
+import { DateTimePicker } from '@/components/date-time-picker';
 import { getColorHex } from '@/lib/color-mapping';
 import { isPreviewMode } from '@/lib/preview-mode';
 import { mockBattlefronts } from '@/lib/mockData';
+import { createMission } from '@/lib/missions-service';
+import { syncMissionToCalendar } from '@/lib/mission-calendar-sync';
 
 type Battlefront = {
   id: string;
@@ -45,6 +48,8 @@ export default function MasterListPage() {
   const [newMissionTitle, setNewMissionTitle] = useState('');
   const [newMissionBattlefront, setNewMissionBattlefront] = useState<string>('__none__');
   const [newMissionDuration, setNewMissionDuration] = useState('60');
+  const [deployMission, setDeployMission] = useState<LocalMission | null>(null);
+  const [deployDateTime, setDeployDateTime] = useState<string>('');
 
   // Load missions from localStorage on mount
   useEffect(() => {
@@ -170,6 +175,44 @@ export default function MasterListPage() {
     ));
   };
 
+  const handleDeployMission = async () => {
+    if (!user || !deployMission || !deployDateTime) {
+      toast.error('Please select a date and time');
+      return;
+    }
+
+    try {
+      // Create the mission in Master Missions
+      const newMission = await createMission(user.id, {
+        title: deployMission.title,
+        battlefront_id: deployMission.battlefront_id,
+        duration_minutes: deployMission.duration_minutes,
+        start_at: deployDateTime,
+      });
+
+      // Sync to calendar
+      await syncMissionToCalendar({
+        id: newMission.id,
+        user_id: user.id,
+        title: newMission.title,
+        start_at: deployDateTime,
+        duration_minutes: deployMission.duration_minutes,
+        calendar_event_id: newMission.calendar_event_id,
+        battlefront_id: deployMission.battlefront_id,
+      });
+
+      // Remove from Master List
+      setMissions(missions.filter((m) => m.id !== deployMission.id));
+      
+      setDeployMission(null);
+      setDeployDateTime('');
+      toast.success('Mission deployed to Master Missions!');
+    } catch (error) {
+      console.error('Failed to deploy mission:', error);
+      toast.error('Failed to deploy mission');
+    }
+  };
+
   const handleDeleteMission = (mission: LocalMission) => {
     setMissions(missions.filter((m) => m.id !== mission.id));
     toast.success('Mission removed from list');
@@ -234,14 +277,11 @@ export default function MasterListPage() {
                       <td className="p-3 sm:p-4">
                         <button
                           type="button"
-                          onClick={() => handleToggleComplete(mission.id)}
-                          className={`w-6 h-6 rounded border-2 flex items-center justify-center transition-all cursor-pointer ${
-                            mission.completed
-                              ? 'bg-green-500 border-green-500 scale-110'
-                              : 'border-slate-600 hover:border-blue-500'
-                          }`}
+                          onClick={() => setDeployMission(mission)}
+                          className="w-6 h-6 rounded border-2 border-blue-500 hover:border-blue-400 flex items-center justify-center transition-all cursor-pointer hover:bg-blue-500/10"
+                          title="Deploy to Master Missions"
                         >
-                          {mission.completed && <Check className="w-4 h-4 text-white" />}
+                          <Calendar className="w-4 h-4 text-blue-400" />
                         </button>
                       </td>
                       <td className="p-3 sm:p-4">
@@ -420,6 +460,70 @@ export default function MasterListPage() {
               disabled={!newMissionTitle.trim()}
             >
               Add Mission
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Deploy Mission Modal */}
+      <Dialog open={!!deployMission} onOpenChange={() => setDeployMission(null)}>
+        <DialogContent className="bg-slate-900 border-slate-700 text-white">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-blue-400" />
+              Deploy Mission to Master Missions
+            </DialogTitle>
+            <DialogDescription className="text-slate-400">
+              Schedule this mission and add it to your calendar
+            </DialogDescription>
+          </DialogHeader>
+          {deployMission && (
+            <div className="space-y-4">
+              <div>
+                <label className="text-slate-300 text-sm mb-2 block">Mission</label>
+                <div className="p-3 bg-slate-800 rounded border border-slate-700">
+                  <div className="font-medium text-white">{deployMission.title}</div>
+                  <div className="flex items-center gap-3 mt-1 text-sm text-slate-400">
+                    {deployMission.battlefront && (
+                      <div className="flex items-center gap-1.5">
+                        <div
+                          className="w-2 h-2 rounded-full"
+                          style={{ backgroundColor: getColorHex(deployMission.battlefront.color) }}
+                        />
+                        {deployMission.battlefront.name}
+                      </div>
+                    )}
+                    <div>⏱️ {deployMission.duration_minutes}m</div>
+                  </div>
+                </div>
+              </div>
+              <div>
+                <label className="text-slate-300 text-sm mb-2 block">Schedule Date & Time *</label>
+                <DateTimePicker
+                  value={deployDateTime}
+                  onChange={(value) => setDeployDateTime(value || '')}
+                  placeholder="Select date and time"
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setDeployMission(null);
+                setDeployDateTime('');
+              }}
+              className="bg-slate-800 border-slate-600 text-white hover:bg-slate-700"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleDeployMission}
+              className="bg-blue-600 hover:bg-blue-700"
+              disabled={!deployDateTime}
+            >
+              Deploy Mission
             </Button>
           </DialogFooter>
         </DialogContent>
