@@ -57,7 +57,6 @@ export default function MasterListPage() {
   const [editingTitle, setEditingTitle] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [showNewModal, setShowNewModal] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState<Mission | null>(null);
   const [minutesLeftToday, setMinutesLeftToday] = useState(() => getMinutesLeftTodayToronto());
 
   const urlFilter = searchParams.get('filter') as FilterType | null;
@@ -309,7 +308,6 @@ export default function MasterListPage() {
       }
       await deleteMission(mission.id);
       setAllMissions(allMissions.filter((m) => m.id !== mission.id));
-      setDeleteConfirm(null);
       toast.success('Mission deleted');
     } catch (error) {
       toast.error('Failed to delete mission');
@@ -713,8 +711,9 @@ export default function MasterListPage() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => setDeleteConfirm(mission)}
+                            onClick={() => handleDeleteMission(mission)}
                             className="h-8 w-8 text-slate-400 hover:text-red-400 hover:bg-slate-700"
+                            title="Delete mission"
                           >
                             <Trash2 className="w-4 h-4" />
                           </Button>
@@ -763,37 +762,6 @@ export default function MasterListPage() {
         onCreateMultiple={handleCreateMultipleMissions}
         battlefronts={battlefronts}
       />
-
-      <Dialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
-        <DialogContent className="bg-slate-900 border-slate-700 text-white">
-          <DialogHeader>
-            <DialogTitle>Delete Mission</DialogTitle>
-            <DialogDescription className="text-slate-400">
-              Are you sure you want to delete &quot;{deleteConfirm?.title}&quot;? This action cannot be undone.
-              {deleteConfirm?.calendar_event_id && (
-                <span className="block mt-2 text-amber-400">
-                  This will also remove the linked calendar event.
-                </span>
-              )}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setDeleteConfirm(null)}
-              className="bg-slate-800 border-slate-600 hover:bg-slate-700"
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={() => deleteConfirm && handleDeleteMission(deleteConfirm)}
-              className="bg-red-600 hover:bg-red-700"
-            >
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
