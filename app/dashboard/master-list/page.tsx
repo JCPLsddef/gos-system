@@ -6,22 +6,14 @@ import { supabase } from '@/lib/supabase';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { Plus, Pencil, Trash2, Clock } from 'lucide-react';
+import { Plus, Trash2, Check } from 'lucide-react';
 import { DurationEditor } from '@/components/duration-editor';
 import { getColorHex } from '@/lib/color-mapping';
 import { isPreviewMode } from '@/lib/preview-mode';
 import { mockBattlefronts } from '@/lib/mockData';
-import {
-  getMissionTemplates,
-  createMissionTemplate,
-  updateMissionTemplate,
-  deleteMissionTemplate,
-  type MissionTemplate,
-} from '@/lib/mission-templates-service';
 
 type Battlefront = {
   id: string;
@@ -29,138 +21,142 @@ type Battlefront = {
   color?: string;
 };
 
+type LocalMission = {
+  id: string;
+  title: string;
+  battlefront_id: string | null;
+  duration_minutes: number;
+  completed: boolean;
+  battlefront?: {
+    id: string;
+    name: string;
+    color?: string;
+  } | null;
+};
+
 export default function MasterListPage() {
   const { user } = useAuth();
-  const [templates, setTemplates] = useState<MissionTemplate[]>([]);
+  const [missions, setMissions] = useState<LocalMission[]>([]);
   const [battlefronts, setBattlefronts] = useState<Battlefront[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingTitle, setEditingTitle] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [showNewModal, setShowNewModal] = useState(false);
-  const [newTemplateTitle, setNewTemplateTitle] = useState('');
-  const [newTemplateBattlefront, setNewTemplateBattlefront] = useState<string>('__none__');
-  const [newTemplateDuration, setNewTemplateDuration] = useState('60');
+  const [newMissionTitle, setNewMissionTitle] = useState('');
+  const [newMissionBattlefront, setNewMissionBattlefront] = useState<string>('__none__');
+  const [newMissionDuration, setNewMissionDuration] = useState('60');
 
   useEffect(() => {
     if (user) {
-      loadData();
+      loadBattlefronts();
     }
   }, [user]);
 
-  const loadData = async () => {
+  const loadBattlefronts = async () => {
     if (!user) return;
 
     setLoading(true);
 
     if (isPreviewMode()) {
-      setTemplates([]);
       setBattlefronts(mockBattlefronts.map(bf => ({ id: bf.id, name: bf.name, color: 'blue' })));
       setLoading(false);
       return;
     }
 
     try {
-      const [templatesData, battlefrontsData] = await Promise.all([
-        getMissionTemplates(user.id),
-        supabase.from('battlefronts').select('id, name, color').eq('user_id', user.id),
-      ]);
+      const { data: battlefrontsData } = await supabase
+        .from('battlefronts')
+        .select('id, name, color')
+        .eq('user_id', user.id);
 
-      console.log('Loaded battlefronts:', battlefrontsData.data);
-      console.log('Loaded templates:', templatesData);
-
-      setTemplates(templatesData);
-      setBattlefronts(battlefrontsData.data || []);
+      setBattlefronts(battlefrontsData || []);
     } catch (error: any) {
-      console.error('Failed to load data:', error);
-      toast.error('Failed to load templates');
+      console.error('Failed to load battlefronts:', error);
+      toast.error('Failed to load battlefronts');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCreateTemplate = async () => {
-    if (!user || !newTemplateTitle.trim()) {
-      toast.error('Template title is required');
+  const handleCreateMission = () => {
+    if (!newMissionTitle.trim()) {
+      toast.error('Mission title is required');
       return;
     }
 
-    try {
-      console.log('Creating template with:', {
-        title: newTemplateTitle.trim(),
-        battlefront_id: newTemplateBattlefront === '__none__' ? undefined : newTemplateBattlefront,
-        duration_minutes: parseInt(newTemplateDuration) || 60,
-      });
+    const battlefront = battlefronts.find(bf => bf.id === newMissionBattlefront);
+    
+    const newMission: LocalMission = {
+      id: Date.now().toString(),
+      title: newMissionTitle.trim(),
+      battlefront_id: newMissionBattlefront === '__none__' ? null : newMissionBattlefront,
+      duration_minutes: parseInt(newMissionDuration) || 60,
+      completed: false,
+      battlefront: battlefront ? {
+        id: battlefront.id,
+        name: battlefront.name,
+        color: battlefront.color,
+      } : null,
+    };
 
-      const newTemplate = await createMissionTemplate(user.id, {
-        title: newTemplateTitle.trim(),
-        battlefront_id: newTemplateBattlefront === '__none__' ? undefined : newTemplateBattlefront,
-        duration_minutes: parseInt(newTemplateDuration) || 60,
-      });
-
-      console.log('Template created:', newTemplate);
-      setTemplates([newTemplate, ...templates]);
-      setNewTemplateTitle('');
-      setNewTemplateBattlefront('__none__');
-      setNewTemplateDuration('60');
-      setShowNewModal(false);
-      toast.success('Template created');
-    } catch (error: any) {
-      console.error('Failed to create template:', error);
-      toast.error(error.message || 'Failed to create template');
-    }
+    setMissions([newMission, ...missions]);
+    setNewMissionTitle('');
+    setNewMissionBattlefront('__none__');
+    setNewMissionDuration('60');
+    setShowNewModal(false);
+    toast.success('Mission added to list');
   };
 
-  const handleUpdateTitle = async (templateId: string) => {
-    const template = templates.find((t) => t.id === templateId);
+  const handleUpdateTitle = (missionId: string) => {
+    const mission = missions.find((m) => m.id === missionId);
     const newTitle = editTitle.trim();
 
-    if (!newTitle || template?.title === newTitle) {
+    if (!newTitle || mission?.title === newTitle) {
       setEditingTitle(null);
       return;
     }
 
-    try {
-      const updated = await updateMissionTemplate(templateId, { title: newTitle });
-      setTemplates(templates.map((t) => (t.id === templateId ? updated : t)));
-      setEditingTitle(null);
-      toast.success('Title updated');
-    } catch (error) {
-      toast.error('Failed to update title');
-    }
+    setMissions(missions.map((m) => 
+      m.id === missionId ? { ...m, title: newTitle } : m
+    ));
+    setEditingTitle(null);
+    toast.success('Title updated');
   };
 
-  const handleUpdateDuration = async (templateId: string, duration: number) => {
-    try {
-      const updated = await updateMissionTemplate(templateId, { duration_minutes: duration });
-      setTemplates(templates.map((t) => (t.id === templateId ? updated : t)));
-      toast.success('Duration updated');
-    } catch (error) {
-      toast.error('Failed to update duration');
-    }
+  const handleUpdateDuration = (missionId: string, duration: number) => {
+    setMissions(missions.map((m) => 
+      m.id === missionId ? { ...m, duration_minutes: duration } : m
+    ));
+    toast.success('Duration updated');
   };
 
-  const handleUpdateBattlefront = async (templateId: string, battlefrontId: string) => {
+  const handleUpdateBattlefront = (missionId: string, battlefrontId: string) => {
     const newBattlefrontId = battlefrontId === '__none__' ? null : battlefrontId;
+    const battlefront = battlefronts.find(bf => bf.id === battlefrontId);
 
-    try {
-      const updated = await updateMissionTemplate(templateId, {
+    setMissions(missions.map((m) => 
+      m.id === missionId ? { 
+        ...m, 
         battlefront_id: newBattlefrontId,
-      });
-      setTemplates(templates.map((t) => (t.id === templateId ? updated : t)));
-      toast.success('Battlefront updated');
-    } catch (error) {
-      toast.error('Failed to update battlefront');
-    }
+        battlefront: battlefront ? {
+          id: battlefront.id,
+          name: battlefront.name,
+          color: battlefront.color,
+        } : null,
+      } : m
+    ));
+    toast.success('Battlefront updated');
   };
 
-  const handleDeleteTemplate = async (template: MissionTemplate) => {
-    try {
-      await deleteMissionTemplate(template.id);
-      setTemplates(templates.filter((t) => t.id !== template.id));
-      toast.success('Template deleted');
-    } catch (error) {
-      toast.error('Failed to delete template');
-    }
+  const handleToggleComplete = (missionId: string) => {
+    setMissions(missions.map((m) => 
+      m.id === missionId ? { ...m, completed: !m.completed } : m
+    ));
+  };
+
+  const handleDeleteMission = (mission: LocalMission) => {
+    setMissions(missions.filter((m) => m.id !== mission.id));
+    toast.success('Mission removed from list');
   };
 
   const getBattlefrontColor = (battlefrontId: string | null | undefined): string | undefined => {
@@ -172,7 +168,7 @@ export default function MasterListPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-96">
-        <div className="text-white text-lg">Loading templates...</div>
+        <div className="text-white text-lg">Loading...</div>
       </div>
     );
   }
@@ -182,11 +178,11 @@ export default function MasterListPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-4xl font-bold text-white">MASTER LIST</h1>
-          <p className="text-slate-400 text-lg mt-1">Mission template library</p>
+          <p className="text-slate-400 text-lg mt-1">Local mission planner</p>
         </div>
         <Button onClick={() => setShowNewModal(true)} className="bg-green-600 hover:bg-green-700">
           <Plus className="w-4 h-4 mr-2" />
-          New Template
+          New Mission
         </Button>
       </div>
 
@@ -196,40 +192,50 @@ export default function MasterListPage() {
             <thead className="bg-slate-800/50 border-b border-slate-700">
               <tr>
                 <th className="text-left p-3 sm:p-4 text-slate-400 font-semibold w-12">☐</th>
-                <th className="text-left p-3 sm:p-4 text-slate-400 font-semibold text-sm">Mission Template</th>
+                <th className="text-left p-3 sm:p-4 text-slate-400 font-semibold text-sm">Mission Title</th>
                 <th className="text-left p-3 sm:p-4 text-slate-400 font-semibold text-sm hidden md:table-cell">Battlefront</th>
-                <th className="text-left p-3 sm:p-4 text-slate-400 font-semibold text-sm hidden sm:table-cell">Est. Time</th>
+                <th className="text-left p-3 sm:p-4 text-slate-400 font-semibold text-sm hidden sm:table-cell">Duration</th>
                 <th className="text-right p-3 sm:p-4 text-slate-400 font-semibold w-20 text-sm">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-700">
-              {templates.length === 0 ? (
+              {missions.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="p-8 text-center text-slate-400">
-                    No templates yet. Click &quot;New Template&quot; to create one.
+                    No missions yet. Click &quot;New Mission&quot; to add one.
                   </td>
                 </tr>
               ) : (
-                templates.map((template) => {
-                  const bfColor = getBattlefrontColor(template.battlefront_id);
+                missions.map((mission) => {
+                  const bfColor = getBattlefrontColor(mission.battlefront_id);
                   return (
                     <tr
-                      key={template.id}
-                      className="hover:bg-slate-800/30 transition-all"
+                      key={mission.id}
+                      className={`hover:bg-slate-800/30 transition-all ${
+                        mission.completed ? 'opacity-60' : ''
+                      }`}
                     >
                       <td className="p-3 sm:p-4">
-                        <div className="w-6 h-6 rounded border-2 border-slate-600 flex items-center justify-center">
-                          {/* Checkbox visual only for now */}
-                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleComplete(mission.id)}
+                          className={`w-6 h-6 rounded border-2 flex items-center justify-center transition-all cursor-pointer ${
+                            mission.completed
+                              ? 'bg-green-500 border-green-500 scale-110'
+                              : 'border-slate-600 hover:border-blue-500'
+                          }`}
+                        >
+                          {mission.completed && <Check className="w-4 h-4 text-white" />}
+                        </button>
                       </td>
                       <td className="p-3 sm:p-4">
-                        {editingTitle === template.id ? (
+                        {editingTitle === mission.id ? (
                           <Input
                             value={editTitle}
                             onChange={(e) => setEditTitle(e.target.value)}
-                            onBlur={() => handleUpdateTitle(template.id)}
+                            onBlur={() => handleUpdateTitle(mission.id)}
                             onKeyDown={(e) => {
-                              if (e.key === 'Enter') handleUpdateTitle(template.id);
+                              if (e.key === 'Enter') handleUpdateTitle(mission.id);
                               if (e.key === 'Escape') setEditingTitle(null);
                             }}
                             className="bg-slate-800 border-slate-600 text-white -my-2"
@@ -238,12 +244,14 @@ export default function MasterListPage() {
                         ) : (
                           <span
                             onClick={() => {
-                              setEditingTitle(template.id);
-                              setEditTitle(template.title);
+                              setEditingTitle(mission.id);
+                              setEditTitle(mission.title);
                             }}
-                            className="cursor-pointer hover:text-blue-400 transition-colors text-white font-medium"
+                            className={`cursor-pointer hover:text-blue-400 transition-colors font-medium ${
+                              mission.completed ? 'line-through text-slate-400' : 'text-white'
+                            }`}
                           >
-                            {template.title}
+                            {mission.title}
                           </span>
                         )}
                       </td>
@@ -256,12 +264,12 @@ export default function MasterListPage() {
                             />
                           )}
                           <Select
-                            value={template.battlefront_id || '__none__'}
-                            onValueChange={(value) => handleUpdateBattlefront(template.id, value)}
+                            value={mission.battlefront_id || '__none__'}
+                            onValueChange={(value) => handleUpdateBattlefront(mission.id, value)}
                           >
                             <SelectTrigger className="bg-slate-800 border-slate-600 text-white w-32 lg:w-40 text-sm">
                               <SelectValue placeholder="Select battlefront">
-                                {template.battlefront?.name || 'Unassigned'}
+                                {mission.battlefront?.name || 'Unassigned'}
                               </SelectValue>
                             </SelectTrigger>
                             <SelectContent className="bg-slate-800 border-slate-700">
@@ -287,29 +295,20 @@ export default function MasterListPage() {
                       </td>
                       <td className="p-3 sm:p-4 hidden sm:table-cell">
                         <DurationEditor
-                          initialDuration={template.duration_minutes}
-                          onSave={(duration) => handleUpdateDuration(template.id, duration)}
+                          initialDuration={mission.duration_minutes}
+                          onSave={async (duration) => {
+                            handleUpdateDuration(mission.id, duration);
+                          }}
                         />
                       </td>
-                      <td className="p-3 sm:p-4 text-right">
+                      <td className="p-3 sm:p-4">
                         <div className="flex items-center justify-end gap-1">
                           <Button
                             variant="ghost"
-                            size="icon"
-                            onClick={() => {
-                              setEditingTitle(template.id);
-                              setEditTitle(template.title);
-                            }}
-                            className="h-8 w-8 text-slate-400 hover:text-white hover:bg-slate-700"
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleDeleteTemplate(template)}
-                            className="h-8 w-8 text-slate-400 hover:text-red-400 hover:bg-slate-700"
-                            title="Delete template"
+                            size="sm"
+                            onClick={() => handleDeleteMission(mission)}
+                            className="text-red-400 hover:text-red-300 hover:bg-red-500/10 h-8 w-8 p-0"
+                            title="Delete mission"
                           >
                             <Trash2 className="w-4 h-4" />
                           </Button>
@@ -324,34 +323,34 @@ export default function MasterListPage() {
         </div>
       </Card>
 
-      {/* New Template Modal */}
+      {/* New Mission Modal */}
       <Dialog open={showNewModal} onOpenChange={setShowNewModal}>
         <DialogContent className="bg-slate-900 border-slate-700 text-white">
           <DialogHeader>
-            <DialogTitle>Create New Template</DialogTitle>
+            <DialogTitle>Add New Mission</DialogTitle>
             <DialogDescription className="text-slate-400">
-              Create a reusable mission template
+              Add a mission to your local planning list
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <label className="text-slate-300 text-sm mb-2 block">Template Name *</label>
+              <label className="text-slate-300 text-sm mb-2 block">Mission Title *</label>
               <Input
-                value={newTemplateTitle}
-                onChange={(e) => setNewTemplateTitle(e.target.value)}
+                value={newMissionTitle}
+                onChange={(e) => setNewMissionTitle(e.target.value)}
                 className="bg-slate-800 border-slate-600 text-white"
                 placeholder="e.g., Morning Workout"
                 autoFocus
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && newTemplateTitle.trim()) {
-                    handleCreateTemplate();
+                  if (e.key === 'Enter' && newMissionTitle.trim()) {
+                    handleCreateMission();
                   }
                 }}
               />
             </div>
             <div>
               <label className="text-slate-300 text-sm mb-2 block">Battlefront (optional)</label>
-              <Select value={newTemplateBattlefront} onValueChange={setNewTemplateBattlefront}>
+              <Select value={newMissionBattlefront} onValueChange={setNewMissionBattlefront}>
                 <SelectTrigger className="bg-slate-800 border-slate-600 text-white">
                   <SelectValue placeholder="Select battlefront" />
                 </SelectTrigger>
@@ -374,11 +373,11 @@ export default function MasterListPage() {
               </Select>
             </div>
             <div>
-              <label className="text-slate-300 text-sm mb-2 block">Default Duration (minutes)</label>
+              <label className="text-slate-300 text-sm mb-2 block">Duration (minutes)</label>
               <Input
                 type="number"
-                value={newTemplateDuration}
-                onChange={(e) => setNewTemplateDuration(e.target.value)}
+                value={newMissionDuration}
+                onChange={(e) => setNewMissionDuration(e.target.value)}
                 className="bg-slate-800 border-slate-600 text-white"
                 placeholder="60"
                 min="5"
@@ -391,20 +390,20 @@ export default function MasterListPage() {
               variant="outline"
               onClick={() => {
                 setShowNewModal(false);
-                setNewTemplateTitle('');
-                setNewTemplateBattlefront('__none__');
-                setNewTemplateDuration('60');
+                setNewMissionTitle('');
+                setNewMissionBattlefront('__none__');
+                setNewMissionDuration('60');
               }}
               className="bg-slate-800 border-slate-600 text-white hover:bg-slate-700"
             >
               Cancel
             </Button>
             <Button
-              onClick={handleCreateTemplate}
+              onClick={handleCreateMission}
               className="bg-green-600 hover:bg-green-700"
-              disabled={!newTemplateTitle.trim()}
+              disabled={!newMissionTitle.trim()}
             >
-              Create Template
+              Add Mission
             </Button>
           </DialogFooter>
         </DialogContent>
