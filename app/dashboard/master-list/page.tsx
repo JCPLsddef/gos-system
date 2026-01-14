@@ -51,6 +51,7 @@ export default function MasterListPage() {
   const [deployMission, setDeployMission] = useState<LocalMission | null>(null);
   const [deployDateTime, setDeployDateTime] = useState<string>('');
   const [deployIsDaily, setDeployIsDaily] = useState(false);
+  const [deployRecurrenceDays, setDeployRecurrenceDays] = useState('1');
 
   // Load missions from localStorage on mount
   useEffect(() => {
@@ -184,13 +185,15 @@ export default function MasterListPage() {
 
     try {
       if (deployIsDaily) {
-        // Create daily recurring mission
+        // Create recurring mission with custom interval
+        const recurrenceDays = parseInt(deployRecurrenceDays) || 1;
         const newMission = await createMission(user.id, {
           title: deployMission.title,
           battlefront_id: deployMission.battlefront_id,
           duration_minutes: deployMission.duration_minutes,
           start_at: deployDateTime,
           is_recurring: true,
+          recurrence_days: recurrenceDays.toString(),
         });
 
         // Sync to calendar
@@ -204,7 +207,7 @@ export default function MasterListPage() {
           battlefront_id: deployMission.battlefront_id,
         });
 
-        toast.success('Daily mission deployed to Master Missions!');
+        toast.success(`Mission deployed (repeats every ${recurrenceDays} day${recurrenceDays > 1 ? 's' : ''})!`);
       } else {
         // Create single mission
         const newMission = await createMission(user.id, {
@@ -233,6 +236,7 @@ export default function MasterListPage() {
       setDeployMission(null);
       setDeployDateTime('');
       setDeployIsDaily(false);
+      setDeployRecurrenceDays('1');
     } catch (error) {
       console.error('Failed to deploy mission:', error);
       toast.error('Failed to deploy mission');
@@ -531,17 +535,33 @@ export default function MasterListPage() {
                   placeholder="Select date and time"
                 />
               </div>
-              <div className="flex items-center gap-2 p-3 bg-slate-800/50 rounded border border-slate-700">
-                <input
-                  type="checkbox"
-                  id="deploy-daily"
-                  checked={deployIsDaily}
-                  onChange={(e) => setDeployIsDaily(e.target.checked)}
-                  className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-blue-600 focus:ring-blue-500 focus:ring-2"
-                />
-                <label htmlFor="deploy-daily" className="text-slate-300 text-sm cursor-pointer">
-                  🔄 Daily Mission (repeats every day)
-                </label>
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 p-3 bg-slate-800/50 rounded border border-slate-700">
+                  <input
+                    type="checkbox"
+                    id="deploy-daily"
+                    checked={deployIsDaily}
+                    onChange={(e) => setDeployIsDaily(e.target.checked)}
+                    className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-blue-600 focus:ring-blue-500 focus:ring-2"
+                  />
+                  <label htmlFor="deploy-daily" className="text-slate-300 text-sm cursor-pointer flex-1">
+                    🔄 Recurring Mission
+                  </label>
+                </div>
+                {deployIsDaily && (
+                  <div className="ml-6 flex items-center gap-2">
+                    <label className="text-slate-300 text-sm">Repeat every</label>
+                    <Input
+                      type="number"
+                      value={deployRecurrenceDays}
+                      onChange={(e) => setDeployRecurrenceDays(e.target.value)}
+                      className="bg-slate-800 border-slate-600 text-white w-20"
+                      min="1"
+                      max="365"
+                    />
+                    <label className="text-slate-300 text-sm">day(s)</label>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -552,6 +572,7 @@ export default function MasterListPage() {
                 setDeployMission(null);
                 setDeployDateTime('');
                 setDeployIsDaily(false);
+                setDeployRecurrenceDays('1');
               }}
               className="bg-slate-800 border-slate-600 text-white hover:bg-slate-700"
             >
