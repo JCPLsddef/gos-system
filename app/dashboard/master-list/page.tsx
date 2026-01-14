@@ -18,6 +18,9 @@ import { mockBattlefronts } from '@/lib/mockData';
 import { createMission } from '@/lib/missions-service';
 import { syncMissionToCalendar } from '@/lib/mission-calendar-sync';
 import { addDays } from 'date-fns';
+import { toZonedTime, fromZonedTime } from 'date-fns-tz';
+
+const TIMEZONE = 'America/Toronto';
 
 type Battlefront = {
   id: string;
@@ -189,23 +192,31 @@ export default function MasterListPage() {
         // Create multiple separate missions (like Master Missions does)
         const recurrenceDays = parseInt(deployRecurrenceDays) || 1;
         const numOccurrences = 30; // Create 30 missions
-        const baseStartDate = new Date(deployDateTime);
+        
+        // Parse the UTC date string and convert to Toronto timezone
+        const baseUTCDate = new Date(deployDateTime);
+        const baseTorontoDate = toZonedTime(baseUTCDate, TIMEZONE);
         
         console.log('🔄 Creating multiple missions:', {
           title: deployMission.title,
           recurrenceDays,
           numOccurrences,
-          baseStartDate: baseStartDate.toISOString()
+          baseUTCDate: baseUTCDate.toISOString(),
+          baseTorontoDate: baseTorontoDate.toISOString(),
         });
 
         let createdCount = 0;
 
         for (let i = 0; i < numOccurrences; i++) {
-          const missionStartDate = addDays(baseStartDate, i * recurrenceDays);
+          // Add days in Toronto timezone
+          const torontoDate = addDays(baseTorontoDate, i * recurrenceDays);
+          // Convert back to UTC for storage
+          const utcDate = fromZonedTime(torontoDate, TIMEZONE);
           
           console.log(`📍 Creating mission ${i}:`, {
             dayOffset: i * recurrenceDays,
-            startTime: missionStartDate.toISOString()
+            torontoDate: torontoDate.toISOString(),
+            utcDate: utcDate.toISOString(),
           });
 
           // Create a separate mission for each occurrence
@@ -213,7 +224,7 @@ export default function MasterListPage() {
             title: deployMission.title,
             battlefront_id: deployMission.battlefront_id,
             duration_minutes: deployMission.duration_minutes,
-            start_at: missionStartDate.toISOString(),
+            start_at: utcDate.toISOString(),
             is_recurring: false, // Each mission is separate, not recurring
           });
 
@@ -222,7 +233,7 @@ export default function MasterListPage() {
             id: newMission.id,
             user_id: user.id,
             title: newMission.title,
-            start_at: missionStartDate.toISOString(),
+            start_at: utcDate.toISOString(),
             duration_minutes: deployMission.duration_minutes,
             calendar_event_id: newMission.calendar_event_id,
             battlefront_id: deployMission.battlefront_id,
