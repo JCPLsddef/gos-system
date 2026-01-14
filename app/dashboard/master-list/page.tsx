@@ -542,19 +542,19 @@ export default function MasterListPage() {
           <table className="w-full">
             <thead className="bg-slate-800/50 border-b border-slate-700">
               <tr>
-                <th className="text-left p-3 sm:p-4 text-slate-400 font-semibold w-12"></th>
+                <th className="text-left p-3 sm:p-4 text-slate-400 font-semibold w-12">☐</th>
                 <th className="text-left p-3 sm:p-4 text-slate-400 font-semibold text-sm">Mission</th>
                 <th className="text-left p-3 sm:p-4 text-slate-400 font-semibold text-sm hidden md:table-cell">Battlefront</th>
-                <th className="text-left p-3 sm:p-4 text-slate-400 font-semibold text-sm hidden lg:table-cell">Scheduled For</th>
-                <th className="text-left p-3 sm:p-4 text-slate-400 font-semibold text-sm hidden sm:table-cell">Duration</th>
-                <th className="text-left p-3 sm:p-4 text-slate-400 font-semibold w-24 text-sm">Status</th>
-                <th className="text-left p-3 sm:p-4 text-slate-400 font-semibold w-20 text-sm">Actions</th>
+                <th className="text-left p-3 sm:p-4 text-slate-400 font-semibold text-sm hidden lg:table-cell">Due Date</th>
+                <th className="text-left p-3 sm:p-4 text-slate-400 font-semibold text-sm hidden sm:table-cell">Est. Time</th>
+                <th className="text-left p-3 sm:p-4 text-slate-400 font-semibold text-sm hidden xl:table-cell">Scheduled</th>
+                <th className="text-right p-3 sm:p-4 text-slate-400 font-semibold w-20 text-sm">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-700">
               {filteredMissions.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="p-8 text-center text-slate-400">
+                  <td colSpan={8} className="p-8 text-center text-slate-400">
                     {filter === 'active' && !battlefrontFilter && `No active missions ${viewMode === 'day' ? 'today' : 'this week'}`}
                     {filter === 'completed' && 'No completed missions'}
                     {filter === 'overdue' && 'No overdue missions - great job!'}
@@ -680,11 +680,9 @@ export default function MasterListPage() {
                         </div>
                       </td>
                       <td className="p-3 sm:p-4 hidden lg:table-cell">
-                        <DateTimePicker
-                          value={mission.start_at}
-                          onChange={(value) => handleUpdateStartAt(mission.id, value)}
-                          placeholder="Schedule mission"
-                        />
+                        <span className="text-slate-400 text-sm">
+                          {mission.due_date ? format(new Date(mission.due_date), 'MMM dd') : '—'}
+                        </span>
                       </td>
                       <td className="p-3 sm:p-4 hidden sm:table-cell">
                         <DurationEditor
@@ -692,30 +690,15 @@ export default function MasterListPage() {
                           onSave={(duration) => handleUpdateDuration(mission.id, duration)}
                         />
                       </td>
-                      <td className="p-3 sm:p-4">
-                        <div className="flex flex-col gap-1">
-                          {mission.is_recurring && (
-                            <Badge className="bg-amber-600 text-white flex items-center gap-1 w-fit text-xs">
-                              <Repeat className="w-3 h-3" />
-                              Daily
-                            </Badge>
-                          )}
-                          {mission.completed_at ? (
-                            <Badge className="bg-slate-600 text-white text-xs">Done</Badge>
-                          ) : mission.start_at && !mission.is_recurring ? (
-                            <Badge className="bg-green-600 text-white flex items-center gap-1 w-fit text-xs">
-                              <Calendar className="w-3 h-3" />
-                              Scheduled
-                            </Badge>
-                          ) : !mission.is_recurring ? (
-                            <Badge variant="outline" className="border-slate-600 text-slate-400 text-xs">
-                              Not scheduled
-                            </Badge>
-                          ) : null}
-                        </div>
+                      <td className="p-3 sm:p-4 hidden xl:table-cell">
+                        <DateTimePicker
+                          value={mission.start_at}
+                          onChange={(value) => handleUpdateStartAt(mission.id, value)}
+                          placeholder="—"
+                        />
                       </td>
-                      <td className="p-3 sm:p-4">
-                        <div className="flex items-center gap-1">
+                      <td className="p-3 sm:p-4 text-right">
+                        <div className="flex items-center justify-end gap-1">
                           <Button
                             variant="ghost"
                             size="icon"
