@@ -50,6 +50,7 @@ export default function MasterListPage() {
   const [newMissionDuration, setNewMissionDuration] = useState('60');
   const [deployMission, setDeployMission] = useState<LocalMission | null>(null);
   const [deployDateTime, setDeployDateTime] = useState<string>('');
+  const [deployIsDaily, setDeployIsDaily] = useState(false);
 
   // Load missions from localStorage on mount
   useEffect(() => {
@@ -182,30 +183,56 @@ export default function MasterListPage() {
     }
 
     try {
-      // Create the mission in Master Missions
-      const newMission = await createMission(user.id, {
-        title: deployMission.title,
-        battlefront_id: deployMission.battlefront_id,
-        duration_minutes: deployMission.duration_minutes,
-        start_at: deployDateTime,
-      });
+      if (deployIsDaily) {
+        // Create daily recurring mission
+        const newMission = await createMission(user.id, {
+          title: deployMission.title,
+          battlefront_id: deployMission.battlefront_id,
+          duration_minutes: deployMission.duration_minutes,
+          start_at: deployDateTime,
+          is_recurring: true,
+        });
 
-      // Sync to calendar
-      await syncMissionToCalendar({
-        id: newMission.id,
-        user_id: user.id,
-        title: newMission.title,
-        start_at: deployDateTime,
-        duration_minutes: deployMission.duration_minutes,
-        calendar_event_id: newMission.calendar_event_id,
-        battlefront_id: deployMission.battlefront_id,
-      });
+        // Sync to calendar
+        await syncMissionToCalendar({
+          id: newMission.id,
+          user_id: user.id,
+          title: newMission.title,
+          start_at: deployDateTime,
+          duration_minutes: deployMission.duration_minutes,
+          calendar_event_id: newMission.calendar_event_id,
+          battlefront_id: deployMission.battlefront_id,
+        });
+
+        toast.success('Daily mission deployed to Master Missions!');
+      } else {
+        // Create single mission
+        const newMission = await createMission(user.id, {
+          title: deployMission.title,
+          battlefront_id: deployMission.battlefront_id,
+          duration_minutes: deployMission.duration_minutes,
+          start_at: deployDateTime,
+        });
+
+        // Sync to calendar
+        await syncMissionToCalendar({
+          id: newMission.id,
+          user_id: user.id,
+          title: newMission.title,
+          start_at: deployDateTime,
+          duration_minutes: deployMission.duration_minutes,
+          calendar_event_id: newMission.calendar_event_id,
+          battlefront_id: deployMission.battlefront_id,
+        });
+
+        toast.success('Mission deployed to Master Missions!');
+      }
 
       // Keep the mission in Master List (don't remove it)
       
       setDeployMission(null);
       setDeployDateTime('');
-      toast.success('Mission deployed to Master Missions!');
+      setDeployIsDaily(false);
     } catch (error) {
       console.error('Failed to deploy mission:', error);
       toast.error('Failed to deploy mission');
@@ -504,6 +531,18 @@ export default function MasterListPage() {
                   placeholder="Select date and time"
                 />
               </div>
+              <div className="flex items-center gap-2 p-3 bg-slate-800/50 rounded border border-slate-700">
+                <input
+                  type="checkbox"
+                  id="deploy-daily"
+                  checked={deployIsDaily}
+                  onChange={(e) => setDeployIsDaily(e.target.checked)}
+                  className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-blue-600 focus:ring-blue-500 focus:ring-2"
+                />
+                <label htmlFor="deploy-daily" className="text-slate-300 text-sm cursor-pointer">
+                  🔄 Daily Mission (repeats every day)
+                </label>
+              </div>
             </div>
           )}
           <DialogFooter>
@@ -512,6 +551,7 @@ export default function MasterListPage() {
               onClick={() => {
                 setDeployMission(null);
                 setDeployDateTime('');
+                setDeployIsDaily(false);
               }}
               className="bg-slate-800 border-slate-600 text-white hover:bg-slate-700"
             >
