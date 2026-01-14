@@ -201,8 +201,7 @@ export default function MasterListPage() {
         battlefront_id: deployMission.battlefront_id,
       });
 
-      // Remove from Master List
-      setMissions(missions.filter((m) => m.id !== deployMission.id));
+      // Keep the mission in Master List (don't remove it)
       
       setDeployMission(null);
       setDeployDateTime('');
