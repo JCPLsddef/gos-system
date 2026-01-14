@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { addMinutes } from 'date-fns';
+import { addMinutes, addDays } from 'date-fns';
 import { fromZonedTime, toZonedTime } from 'date-fns-tz';
 import { cancelNotificationForMission } from './notifications';
 
@@ -217,13 +217,12 @@ export async function syncRecurringMissionToCalendar(
   if (!mission.start_at) return [];
 
   const eventIds: string[] = [];
-  const startDate = new Date(mission.start_at);
+  const baseStartDate = new Date(mission.start_at);
 
   // Create calendar events for the next N occurrences
   for (let i = 0; i < occurrences; i++) {
-    const occurrenceStart = new Date(startDate);
-    occurrenceStart.setDate(occurrenceStart.getDate() + (i * recurrenceDays));
-    
+    // Add days using date-fns for reliable date arithmetic
+    const occurrenceStart = addDays(baseStartDate, i * recurrenceDays);
     const occurrenceEnd = addMinutes(occurrenceStart, mission.duration_minutes || 60);
 
     const { data: event, error } = await supabase
