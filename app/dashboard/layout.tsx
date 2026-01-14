@@ -17,6 +17,7 @@ import {
   LogOut,
   Menu,
   X,
+  Database,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Chatbot } from '@/components/chatbot';
@@ -26,6 +27,7 @@ import { startNotificationPolling, requestNotificationPermission } from '@/lib/n
 const navigation = [
   { name: 'Grand Strategy', href: '/dashboard/strategy', icon: Target },
   { name: 'War Map', href: '/dashboard/warmap', icon: Map },
+  { name: 'Master List', href: '/dashboard/master-list', icon: Database },
   { name: 'Master Missions', href: '/dashboard/missions', icon: ListTodo },
   { name: 'Calendar', href: '/dashboard/calendar', icon: Calendar },
   { name: 'Scoreboard', href: '/dashboard/scoreboard', icon: Trophy },
