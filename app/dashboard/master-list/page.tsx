@@ -16,7 +16,8 @@ import { getColorHex } from '@/lib/color-mapping';
 import { isPreviewMode } from '@/lib/preview-mode';
 import { mockBattlefronts } from '@/lib/mockData';
 import { createMission } from '@/lib/missions-service';
-import { syncMissionToCalendar, syncRecurringMissionToCalendar } from '@/lib/mission-calendar-sync';
+import { syncMissionToCalendar } from '@/lib/mission-calendar-sync';
+import { addDays } from 'date-fns';
 
 type Battlefront = {
   id: string;
@@ -185,33 +186,53 @@ export default function MasterListPage() {
 
     try {
       if (deployIsDaily) {
-        // Create recurring mission with custom interval
+        // Create multiple separate missions (like Master Missions does)
         const recurrenceDays = parseInt(deployRecurrenceDays) || 1;
-        const newMission = await createMission(user.id, {
+        const numOccurrences = 30; // Create 30 missions
+        const baseStartDate = new Date(deployDateTime);
+        
+        console.log('🔄 Creating multiple missions:', {
           title: deployMission.title,
-          battlefront_id: deployMission.battlefront_id,
-          duration_minutes: deployMission.duration_minutes,
-          start_at: deployDateTime,
-          is_recurring: true,
-          recurrence_days: recurrenceDays.toString(),
+          recurrenceDays,
+          numOccurrences,
+          baseStartDate: baseStartDate.toISOString()
         });
 
-        // Sync recurring mission to calendar (creates multiple calendar events)
-        await syncRecurringMissionToCalendar(
-          {
+        let createdCount = 0;
+
+        for (let i = 0; i < numOccurrences; i++) {
+          const missionStartDate = addDays(baseStartDate, i * recurrenceDays);
+          
+          console.log(`📍 Creating mission ${i}:`, {
+            dayOffset: i * recurrenceDays,
+            startTime: missionStartDate.toISOString()
+          });
+
+          // Create a separate mission for each occurrence
+          const newMission = await createMission(user.id, {
+            title: deployMission.title,
+            battlefront_id: deployMission.battlefront_id,
+            duration_minutes: deployMission.duration_minutes,
+            start_at: missionStartDate.toISOString(),
+            is_recurring: false, // Each mission is separate, not recurring
+          });
+
+          // Sync each mission to calendar
+          await syncMissionToCalendar({
             id: newMission.id,
             user_id: user.id,
             title: newMission.title,
-            start_at: deployDateTime,
+            start_at: missionStartDate.toISOString(),
             duration_minutes: deployMission.duration_minutes,
             calendar_event_id: newMission.calendar_event_id,
             battlefront_id: deployMission.battlefront_id,
-          },
-          recurrenceDays,
-          30 // Create 30 occurrences in calendar
-        );
+          });
 
-        toast.success(`Mission deployed (repeats every ${recurrenceDays} day${recurrenceDays > 1 ? 's' : ''})!`);
+          createdCount++;
+        }
+
+        console.log(`✅ Created ${createdCount} missions successfully`);
+        toast.success(`Deployed ${createdCount} missions (every ${recurrenceDays} day${recurrenceDays > 1 ? 's' : ''})!`);
       } else {
         // Create single mission
         const newMission = await createMission(user.id, {
