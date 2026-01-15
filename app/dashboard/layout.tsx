@@ -18,6 +18,7 @@ import {
   Menu,
   X,
   Database,
+  Lightbulb,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Chatbot } from '@/components/chatbot';
@@ -32,6 +33,7 @@ const navigation = [
   { name: 'Calendar', href: '/dashboard/calendar', icon: Calendar },
   { name: 'Scoreboard', href: '/dashboard/scoreboard', icon: Trophy },
   { name: 'System Builder', href: '/dashboard/systems', icon: BookOpen },
+  { name: 'Genius Planner', href: '/dashboard/genius-planner', icon: Lightbulb },
   { name: 'War Room', href: '/dashboard/warroom', icon: Shield },
 ];
 
