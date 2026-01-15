@@ -361,6 +361,85 @@ export function EventEditor({ event, isOpen, onClose, onSave, onDelete, onRefres
     }
   };
 
+  const handleDeleteAllUpcoming = async () => {
+    if (!event || !user) return;
+
+    try {
+      console.log('🗑️ Deleting all upcoming events:', event.title);
+      
+      // Get the event's start time
+      const eventStartTime = new Date(event.start_time);
+      
+      // Find all calendar events with:
+      // 1. Same title (same mission series)
+      // 2. Same user
+      // 3. Start time >= this event's start time (this + future)
+      const { data: upcomingEvents, error: fetchError } = await supabase
+        .from('calendar_events')
+        .select('id, mission_id, title, start_time')
+        .eq('user_id', user.id)
+        .eq('title', event.title)
+        .gte('start_time', eventStartTime.toISOString())
+        .order('start_time');
+      
+      if (fetchError) {
+        console.error('Error fetching upcoming events:', fetchError);
+        toast.error('Failed to fetch upcoming events');
+        return;
+      }
+      
+      console.log(`Found ${upcomingEvents?.length || 0} upcoming events to delete`);
+      
+      if (!upcomingEvents || upcomingEvents.length === 0) {
+        toast.error('No upcoming events found');
+        return;
+      }
+      
+      // Delete all upcoming missions AND calendar events
+      let deletedMissions = 0;
+      let deletedEvents = 0;
+      
+      for (const evt of upcomingEvents) {
+        // Delete mission if it exists
+        if (evt.mission_id) {
+          const { error: missionError } = await supabase
+            .from('missions')
+            .delete()
+            .eq('id', evt.mission_id);
+          
+          if (!missionError) {
+            deletedMissions++;
+            console.log(`  ✅ Deleted mission: ${evt.mission_id}`);
+          }
+        }
+        
+        // Delete calendar event
+        const { error: eventError } = await supabase
+          .from('calendar_events')
+          .delete()
+          .eq('id', evt.id);
+        
+        if (!eventError) {
+          deletedEvents++;
+          console.log(`  ✅ Deleted event: ${evt.title} (${evt.start_time})`);
+        }
+      }
+      
+      console.log(`✅ Deleted ${deletedMissions} missions and ${deletedEvents} calendar events`);
+      toast.success(`Deleted ${deletedEvents} upcoming events`);
+      
+      setShowDeleteConfirm(false);
+      onClose();
+      if (onRefresh) {
+        onRefresh();
+      }
+    } catch (error) {
+      console.error('Error deleting upcoming events:', error);
+      toast.error('Failed to delete upcoming events');
+      setShowDeleteConfirm(false);
+    }
+  };
+
   const startDate = toZonedTime(new Date(event.start_time), TIMEZONE);
 
   const handleClose = (open: boolean) => {
@@ -542,21 +621,35 @@ export function EventEditor({ event, isOpen, onClose, onSave, onDelete, onRefres
       <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
         <AlertDialogContent className="bg-slate-900 border-slate-700">
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-white">Delete Event?</AlertDialogTitle>
+            <AlertDialogTitle className="text-white">Delete Event</AlertDialogTitle>
             <AlertDialogDescription className="text-slate-400">
-              Are you sure you want to delete this event? This action cannot be undone.
+              Choose how you want to delete this event:
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <div className="space-y-3 py-4">
+            <Button
+              onClick={handleDeleteConfirm}
+              className="w-full bg-red-600 hover:bg-red-700 text-white justify-start"
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Delete This Event Only
+            </Button>
+            <Button
+              onClick={handleDeleteAllUpcoming}
+              className="w-full bg-red-700 hover:bg-red-800 text-white justify-start"
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Delete All Upcoming Events
+            </Button>
+            <p className="text-xs text-slate-500 mt-2">
+              "All Upcoming" deletes this event and all future events with the same title.
+              Past events are kept.
+            </p>
+          </div>
           <AlertDialogFooter>
             <AlertDialogCancel className="bg-slate-800 border-slate-600 text-white hover:bg-slate-700">
               Cancel
             </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDeleteConfirm}
-              className="bg-red-600 hover:bg-red-700 text-white"
-            >
-              Delete
-            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
