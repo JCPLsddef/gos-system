@@ -12,12 +12,14 @@ import { format, addDays } from 'date-fns';
 import { fromZonedTime } from 'date-fns-tz';
 import { getTorontoDate } from '@/lib/date-utils';
 import { Repeat, Calendar } from 'lucide-react';
+import { getColorHex } from '@/lib/color-mapping';
 
 const TIMEZONE = 'America/Toronto';
 
 type Battlefront = {
   id: string;
   name: string;
+  color?: string;
 };
 
 type NewMissionModalProps = {
@@ -222,13 +224,40 @@ export function NewMissionModal({ isOpen, onClose, onCreate, onCreateMultiple, b
             </Label>
             <Select value={battlefrontId || '__none__'} onValueChange={setBattlefrontId}>
               <SelectTrigger className="bg-slate-800 border-slate-600 text-white mt-1">
-                <SelectValue placeholder="Select battlefront (optional)" />
+                <SelectValue placeholder="Select battlefront (optional)">
+                  {battlefrontId && battlefrontId !== '__none__' ? (
+                    <div className="flex items-center gap-2">
+                      {(() => {
+                        const bf = battlefronts.find(b => b.id === battlefrontId);
+                        return bf ? (
+                          <>
+                            {bf.color && (
+                              <div
+                                className="w-3 h-3 rounded-full"
+                                style={{ backgroundColor: getColorHex(bf.color) }}
+                              />
+                            )}
+                            <span>{bf.name}</span>
+                          </>
+                        ) : 'Select battlefront';
+                      })()}
+                    </div>
+                  ) : 'Unassigned'}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent className="bg-slate-800 border-slate-700">
-                <SelectItem value="__none__" className="text-white">Unassigned</SelectItem>
+                <SelectItem value="__none__" className="text-white">
+                  Unassigned
+                </SelectItem>
                 {battlefronts.map((bf) => (
                   <SelectItem key={bf.id} value={bf.id} className="text-white">
-                    {bf.name}
+                    <span className="flex items-center gap-2">
+                      <span
+                        className="w-3 h-3 rounded-full inline-block"
+                        style={{ backgroundColor: getColorHex(bf.color || 'blue') }}
+                      />
+                      {bf.name}
+                    </span>
                   </SelectItem>
                 ))}
               </SelectContent>
