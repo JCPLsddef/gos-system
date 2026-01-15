@@ -210,19 +210,53 @@ export async function createCalendarEventForMission(
 }
 
 /**
- * Clean up orphaned calendar events (events with mission_id that doesn't exist in missions table)
+ * Clean up orphaned calendar events:
+ * 1. Events with mission_id that doesn't exist in missions table
+ * 2. Events with NULL mission_id (created without a mission - these are orphans!)
  * Call this periodically or on page load to ensure data integrity
  */
 export async function cleanupOrphanedCalendarEvents(userId: string): Promise<number> {
-  // Get all calendar events for this user that have a mission_id
+  console.log('🔍 Starting orphan cleanup for user:', userId);
+
+  // PART 1: Delete calendar events with NULL mission_id (orphans from direct calendar creation)
+  const { data: nullMissionEvents, error: nullError } = await supabase
+    .from('calendar_events')
+    .select('id, title, start_time')
+    .eq('user_id', userId)
+    .is('mission_id', null);
+
+  let deletedCount = 0;
+
+  if (!nullError && nullMissionEvents && nullMissionEvents.length > 0) {
+    console.log(`🗑️ Found ${nullMissionEvents.length} calendar events with NULL mission_id:`);
+    nullMissionEvents.forEach(e => {
+      console.log(`   - "${e.title}" at ${e.start_time}`);
+    });
+
+    const nullEventIds = nullMissionEvents.map(e => e.id);
+    const { error: deleteNullError } = await supabase
+      .from('calendar_events')
+      .delete()
+      .in('id', nullEventIds);
+
+    if (!deleteNullError) {
+      deletedCount += nullMissionEvents.length;
+      console.log(`✅ Deleted ${nullMissionEvents.length} events with NULL mission_id`);
+    } else {
+      console.error('Error deleting NULL mission_id events:', deleteNullError);
+    }
+  }
+
+  // PART 2: Delete calendar events where mission_id exists but mission doesn't
   const { data: calendarEvents, error: fetchError } = await supabase
     .from('calendar_events')
-    .select('id, mission_id')
+    .select('id, title, start_time, mission_id')
     .eq('user_id', userId)
     .not('mission_id', 'is', null);
 
   if (fetchError || !calendarEvents || calendarEvents.length === 0) {
-    return 0;
+    console.log(`📊 Cleanup complete: ${deletedCount} total orphaned events deleted`);
+    return deletedCount;
   }
 
   // Get all mission IDs for this user
@@ -233,35 +267,37 @@ export async function cleanupOrphanedCalendarEvents(userId: string): Promise<num
 
   if (missionsError) {
     console.error('Error fetching missions for cleanup:', missionsError);
-    return 0;
+    return deletedCount;
   }
 
   const missionIds = new Set((missions || []).map(m => m.id));
+  console.log(`📋 User has ${missionIds.size} missions in database`);
 
   // Find orphaned calendar events (mission_id doesn't exist in missions)
-  const orphanedEventIds = calendarEvents
-    .filter(event => event.mission_id && !missionIds.has(event.mission_id))
-    .map(event => event.id);
+  const orphanedEvents = calendarEvents.filter(event => event.mission_id && !missionIds.has(event.mission_id));
 
-  if (orphanedEventIds.length === 0) {
-    return 0;
+  if (orphanedEvents.length > 0) {
+    console.log(`🗑️ Found ${orphanedEvents.length} calendar events with invalid mission_id:`);
+    orphanedEvents.forEach(e => {
+      console.log(`   - "${e.title}" at ${e.start_time} (mission_id: ${e.mission_id})`);
+    });
+
+    const orphanedEventIds = orphanedEvents.map(e => e.id);
+    const { error: deleteError } = await supabase
+      .from('calendar_events')
+      .delete()
+      .in('id', orphanedEventIds);
+
+    if (!deleteError) {
+      deletedCount += orphanedEvents.length;
+      console.log(`✅ Deleted ${orphanedEvents.length} events with invalid mission_id`);
+    } else {
+      console.error('Error deleting orphaned calendar events:', deleteError);
+    }
   }
 
-  console.log(`🧹 Found ${orphanedEventIds.length} orphaned calendar events, deleting...`);
-
-  // Delete orphaned events
-  const { error: deleteError } = await supabase
-    .from('calendar_events')
-    .delete()
-    .in('id', orphanedEventIds);
-
-  if (deleteError) {
-    console.error('Error deleting orphaned calendar events:', deleteError);
-    return 0;
-  }
-
-  console.log(`✅ Deleted ${orphanedEventIds.length} orphaned calendar events`);
-  return orphanedEventIds.length;
+  console.log(`📊 Cleanup complete: ${deletedCount} total orphaned events deleted`);
+  return deletedCount;
 }
 
 export async function syncRecurringMissionToCalendar(

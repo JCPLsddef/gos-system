@@ -114,41 +114,52 @@ export function NewMissionModal({ isOpen, onClose, onCreate, onCreateMultiple, b
         const missions: (typeof baseMissionData & { start_at: string })[] = [];
         const numDays = parseInt(numberOfDays) || 7;
 
-        console.log('🔄 Creating daily repeat missions:', { numDays, selectedDays });
+        console.log('═══════════════════════════════════════════════════════════');
+        console.log('🔄 DAILY REPEAT: Creating missions');
+        console.log('═══════════════════════════════════════════════════════════');
+        console.log('📅 Base Date:', date, 'Time:', startTime);
+        console.log('📊 Number of Days:', numDays);
+        console.log('📋 Selected Days:', selectedDays);
+        console.log('───────────────────────────────────────────────────────────');
 
         for (let i = 0; i < numDays; i++) {
           // Add days in Toronto timezone to preserve the time of day
           const torontoMissionDate = addDays(torontoStartDate, i);
           const dayKey = getDayOfWeekKey(torontoMissionDate);
 
-          console.log(`📍 Day ${i}:`, {
-            torontoDate: torontoMissionDate.toString(),
-            dayOfWeek: dayKey,
-            isSelected: selectedDays[dayKey],
-          });
+          // Extract date parts for clear logging
+          const dateStr = `${torontoMissionDate.getFullYear()}-${String(torontoMissionDate.getMonth() + 1).padStart(2, '0')}-${String(torontoMissionDate.getDate()).padStart(2, '0')}`;
 
           if (selectedDays[dayKey]) {
             // Convert from Toronto time to UTC for storage
             const utcMissionDate = fromZonedTime(torontoMissionDate, TIMEZONE);
 
-            console.log(`✅ Adding mission for day ${i}:`, {
-              torontoDate: torontoMissionDate.toString(),
-              utcDate: utcMissionDate.toISOString(),
-            });
+            console.log(`✅ Day ${i}: ${dateStr} (${dayKey}) → UTC: ${utcMissionDate.toISOString()}`);
 
             missions.push({
               ...baseMissionData,
               start_at: utcMissionDate.toISOString(),
             });
+          } else {
+            console.log(`⏭️ Day ${i}: ${dateStr} (${dayKey}) → SKIPPED (day not selected)`);
           }
         }
+
+        console.log('───────────────────────────────────────────────────────────');
 
         if (missions.length === 0) {
           toast.error('No days selected for the selected period');
           return;
         }
 
-        console.log(`📋 Creating ${missions.length} missions`);
+        // Final summary - show ALL dates being created
+        console.log(`📋 SUMMARY: Creating ${missions.length} missions with these dates:`);
+        missions.forEach((m, idx) => {
+          const d = new Date(m.start_at);
+          console.log(`   ${idx + 1}. ${m.start_at} → ${d.toLocaleDateString('en-CA')} at ${d.toLocaleTimeString()}`);
+        });
+        console.log('═══════════════════════════════════════════════════════════');
+
         await onCreateMultiple(missions);
         toast.success(`Created ${missions.length} missions`);
       } else {
