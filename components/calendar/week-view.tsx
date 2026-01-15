@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { format } from 'date-fns';
+import { format, addMinutes } from 'date-fns';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -11,7 +11,6 @@ import {
   getHourSlots,
   positionEventsForDay,
   CalendarEvent,
-  createEvent,
   updateEventTimes,
   snapToGrid,
 } from '@/lib/calendar-utils';
@@ -22,7 +21,8 @@ import { EventEditor } from './event-editor';
 import { CurrentTimeLine } from './current-time-line';
 import { supabase } from '@/lib/supabase';
 import { startOfDay, endOfDay } from 'date-fns';
-import { updateMissionFromCalendarEvent } from '@/lib/mission-calendar-sync';
+import { updateMissionFromCalendarEvent, cleanupOrphanedCalendarEvents } from '@/lib/mission-calendar-sync';
+import { createMission } from '@/lib/missions-service';
 import { isPreviewMode } from '@/lib/preview-mode';
 import { mockCalendarEvents } from '@/lib/mockData';
 
@@ -65,6 +65,13 @@ export function WeekView({ userId, currentWeekStart, onWeekChange }: WeekViewPro
 
     // PRODUCTION: Real Supabase queries
     try {
+      // Clean up orphaned calendar events first (events without missions)
+      cleanupOrphanedCalendarEvents(userId).then(count => {
+        if (count > 0) {
+          console.log(`🧹 WeekView: Cleaned up ${count} orphaned calendar events`);
+        }
+      }).catch(err => console.error('Cleanup error:', err));
+
       const weekStart = startOfDay(weekDays[0]);
       const weekEnd = endOfDay(weekDays[6]);
 
@@ -126,18 +133,53 @@ export function WeekView({ userId, currentWeekStart, onWeekChange }: WeekViewPro
   const handleCreateEvent = async (day: Date, startMinutes: number) => {
     try {
       const snapped = snapToGrid(startMinutes, 15);
-      const newEvent = createEvent(userId, 'New Event', day, snapped, 60);
+      const durationMinutes = 60;
 
-      const { data, error } = await supabase.from('calendar_events').insert(newEvent).select().single();
+      // Calculate start and end times
+      const startHour = Math.floor(snapped / 60);
+      const startMinute = snapped % 60;
+      const startTime = new Date(day);
+      startTime.setHours(startHour, startMinute, 0, 0);
+      const endTime = addMinutes(startTime, durationMinutes);
 
-      if (error) throw error;
+      // FIRST: Create mission in missions table (Master Missions is source of truth)
+      const mission = await createMission(userId, {
+        title: 'New Event',
+        duration_minutes: durationMinutes,
+        start_at: startTime.toISOString(),
+      });
 
-      setEvents([...events, data as CalendarEventWithColor]);
+      console.log('📋 Created mission first:', mission.id);
+
+      // THEN: Create calendar event linked to the mission
+      const { data: eventData, error: eventError } = await supabase
+        .from('calendar_events')
+        .insert({
+          user_id: userId,
+          title: 'New Event',
+          start_time: startTime.toISOString(),
+          end_time: endTime.toISOString(),
+          mission_id: mission.id, // Link to mission!
+        })
+        .select()
+        .single();
+
+      if (eventError) throw eventError;
+
+      // Update mission with calendar_event_id
+      await supabase
+        .from('missions')
+        .update({ calendar_event_id: eventData.id })
+        .eq('id', mission.id);
+
+      console.log('📅 Created calendar event:', eventData.id, 'linked to mission:', mission.id);
+
+      setEvents([...events, eventData as CalendarEventWithColor]);
       toast.success('Event created');
-      setEditingEvent(data as CalendarEventWithColor);
+      setEditingEvent(eventData as CalendarEventWithColor);
     } catch (error: any) {
+      console.error('Failed to create event:', error);
       toast.error('Failed to create event');
-      console.error(error);
     }
   };
 
@@ -215,6 +257,23 @@ export function WeekView({ userId, currentWeekStart, onWeekChange }: WeekViewPro
 
   const handleDeleteEvent = async (eventId: string) => {
     try {
+      const event = events.find((e) => e.id === eventId);
+
+      // If event has a mission, delete the mission first (which will cascade delete the calendar event)
+      if (event?.mission_id) {
+        console.log('🗑️ Deleting mission:', event.mission_id, 'and its calendar event:', eventId);
+        // Delete mission first - this will cascade delete calendar event
+        const { error: missionError } = await supabase
+          .from('missions')
+          .delete()
+          .eq('id', event.mission_id);
+
+        if (missionError) {
+          console.error('Error deleting mission:', missionError);
+        }
+      }
+
+      // Delete the calendar event (in case mission delete didn't cascade)
       const { error } = await supabase.from('calendar_events').delete().eq('id', eventId);
 
       if (error) throw error;

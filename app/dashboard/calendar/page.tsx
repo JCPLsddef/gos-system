@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { Calendar as CalendarIcon } from 'lucide-react';
 import { WeekView } from '@/components/calendar/week-view';
@@ -8,6 +8,7 @@ import { DayView } from '@/components/calendar/day-view';
 import { Button } from '@/components/ui/button';
 import { startOfWeek } from 'date-fns';
 import { toZonedTime } from 'date-fns-tz';
+import { cleanupOrphanedCalendarEvents } from '@/lib/mission-calendar-sync';
 
 const TIMEZONE = 'America/Toronto';
 
@@ -21,6 +22,17 @@ export default function CalendarPage() {
     return startOfWeek(now, { weekStartsOn: 1 });
   });
   const [currentDay, setCurrentDay] = useState(() => toZonedTime(new Date(), TIMEZONE));
+
+  // Clean up orphaned calendar events on page load
+  useEffect(() => {
+    if (user) {
+      cleanupOrphanedCalendarEvents(user.id).then(count => {
+        if (count > 0) {
+          console.log(`🧹 CalendarPage: Cleaned up ${count} orphaned calendar events`);
+        }
+      }).catch(err => console.error('Cleanup error:', err));
+    }
+  }, [user]);
 
   if (!user) {
     return (
