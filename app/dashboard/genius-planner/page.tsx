@@ -135,92 +135,86 @@ export default function GeniusPlannerPage() {
           </Button>
         </div>
 
-        <div className="relative">
-          {/* Center: Collect Knowledge */}
-          <div className="flex flex-col items-center mb-12">
-            <div className="bg-slate-800 border-2 border-blue-500 rounded-lg p-4 mb-4 w-full max-w-md">
-              <label className="text-slate-300 text-sm font-medium mb-2 block">
-                Pick a Clear Target Output
-              </label>
-              <Textarea
-                value={skillCycle.target}
-                onChange={(e) => handleSkillCycleChange('target', e.target.value)}
-                className="bg-slate-900 border-slate-600 text-white resize-none"
-                placeholder="What is your target outcome?"
-                rows={2}
-              />
-            </div>
-
-            <ArrowDown className="w-6 h-6 text-blue-400 mb-4" />
-
-            <div className="bg-slate-800 border-2 border-green-500 rounded-lg p-4 w-full max-w-md">
-              <label className="text-slate-300 text-sm font-medium mb-2 block">
-                Collect Knowledge
-              </label>
-              <Textarea
-                value={skillCycle.knowledge}
-                onChange={(e) => handleSkillCycleChange('knowledge', e.target.value)}
-                className="bg-slate-900 border-slate-600 text-white resize-none"
-                placeholder="What knowledge do you need?"
-                rows={2}
-              />
-            </div>
+        <div className="flex flex-col items-center space-y-4">
+          {/* 1. Pick a Clear Target Output */}
+          <div className="bg-slate-800 border-2 border-blue-500 rounded-lg p-4 w-full max-w-md">
+            <label className="text-slate-300 text-sm font-medium mb-2 block">
+              Pick a Clear Target Output
+            </label>
+            <Textarea
+              value={skillCycle.target}
+              onChange={(e) => handleSkillCycleChange('target', e.target.value)}
+              className="bg-slate-900 border-slate-600 text-white resize-none"
+              placeholder="What is your target outcome?"
+              rows={2}
+            />
           </div>
 
-          {/* Cycle */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
-            {/* Right: Test Running the System */}
-            <div className="flex flex-col items-center">
-              <div className="bg-slate-800 border-2 border-amber-500 rounded-lg p-4 w-full">
-                <label className="text-slate-300 text-sm font-medium mb-2 block">
-                  Test Running the System
-                </label>
-                <Textarea
-                  value={skillCycle.test}
-                  onChange={(e) => handleSkillCycleChange('test', e.target.value)}
-                  className="bg-slate-900 border-slate-600 text-white resize-none"
-                  placeholder="How will you test your system?"
-                  rows={3}
-                />
-              </div>
-              <ArrowDown className="w-6 h-6 text-amber-400 my-4" />
-            </div>
+          <ArrowDown className="w-6 h-6 text-blue-400" />
 
-            {/* Left: Make a New Hypothesis */}
-            <div className="flex flex-col items-center md:order-last">
-              <ArrowDown className="w-6 h-6 text-purple-400 my-4 md:hidden" />
-              <div className="bg-slate-800 border-2 border-purple-500 rounded-lg p-4 w-full md:mt-auto">
-                <label className="text-slate-300 text-sm font-medium mb-2 block">
-                  Make a New Hypothesis
-                </label>
-                <Textarea
-                  value={skillCycle.hypothesis}
-                  onChange={(e) => handleSkillCycleChange('hypothesis', e.target.value)}
-                  className="bg-slate-900 border-slate-600 text-white resize-none"
-                  placeholder="What's your next hypothesis?"
-                  rows={3}
-                />
-              </div>
-            </div>
+          {/* 2. Collect Knowledge */}
+          <div className="bg-slate-800 border-2 border-green-500 rounded-lg p-4 w-full max-w-md">
+            <label className="text-slate-300 text-sm font-medium mb-2 block">
+              Collect Knowledge
+            </label>
+            <Textarea
+              value={skillCycle.knowledge}
+              onChange={(e) => handleSkillCycleChange('knowledge', e.target.value)}
+              className="bg-slate-900 border-slate-600 text-white resize-none"
+              placeholder="What knowledge do you need?"
+              rows={2}
+            />
           </div>
 
-          {/* Bottom: Evaluate Your Output */}
-          <div className="flex flex-col items-center">
-            <div className="bg-slate-800 border-2 border-red-500 rounded-lg p-4 w-full max-w-md">
-              <label className="text-slate-300 text-sm font-medium mb-2 block">
-                Evaluate Your Output
-              </label>
-              <Textarea
-                value={skillCycle.evaluate}
-                onChange={(e) => handleSkillCycleChange('evaluate', e.target.value)}
-                className="bg-slate-900 border-slate-600 text-white resize-none"
-                placeholder="How did you perform?"
-                rows={3}
-              />
-            </div>
+          <ArrowDown className="w-6 h-6 text-green-400" />
+
+          {/* 3. Test Running the System */}
+          <div className="bg-slate-800 border-2 border-amber-500 rounded-lg p-4 w-full max-w-md">
+            <label className="text-slate-300 text-sm font-medium mb-2 block">
+              Test Running the System
+            </label>
+            <Textarea
+              value={skillCycle.test}
+              onChange={(e) => handleSkillCycleChange('test', e.target.value)}
+              className="bg-slate-900 border-slate-600 text-white resize-none"
+              placeholder="How will you test your system?"
+              rows={2}
+            />
           </div>
 
-          <div className="mt-6 text-center">
+          <ArrowDown className="w-6 h-6 text-amber-400" />
+
+          {/* 4. Evaluate Your Output */}
+          <div className="bg-slate-800 border-2 border-red-500 rounded-lg p-4 w-full max-w-md">
+            <label className="text-slate-300 text-sm font-medium mb-2 block">
+              Evaluate Your Output
+            </label>
+            <Textarea
+              value={skillCycle.evaluate}
+              onChange={(e) => handleSkillCycleChange('evaluate', e.target.value)}
+              className="bg-slate-900 border-slate-600 text-white resize-none"
+              placeholder="How did you perform?"
+              rows={2}
+            />
+          </div>
+
+          <ArrowDown className="w-6 h-6 text-red-400" />
+
+          {/* 5. Make a New Hypothesis */}
+          <div className="bg-slate-800 border-2 border-purple-500 rounded-lg p-4 w-full max-w-md">
+            <label className="text-slate-300 text-sm font-medium mb-2 block">
+              Make a New Hypothesis
+            </label>
+            <Textarea
+              value={skillCycle.hypothesis}
+              onChange={(e) => handleSkillCycleChange('hypothesis', e.target.value)}
+              className="bg-slate-900 border-slate-600 text-white resize-none"
+              placeholder="What's your next hypothesis?"
+              rows={2}
+            />
+          </div>
+
+          <div className="mt-4 text-center">
             <p className="text-slate-400 text-sm">
               If you hit the target outcome, congrats, you actually{' '}
               <span className="text-green-400 font-bold">HAVE the skill</span>
