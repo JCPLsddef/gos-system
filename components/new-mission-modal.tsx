@@ -9,8 +9,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
 import { format, addDays } from 'date-fns';
+import { fromZonedTime } from 'date-fns-tz';
 import { getTorontoDate } from '@/lib/date-utils';
 import { Repeat, Calendar } from 'lucide-react';
+
+const TIMEZONE = 'America/Toronto';
 
 type Battlefront = {
   id: string;
@@ -84,8 +87,22 @@ export function NewMissionModal({ isOpen, onClose, onCreate, onCreateMultiple, b
 
     try {
       const [hours, minutes] = startTime.split(':').map(Number);
-      const startDate = new Date(date);
-      startDate.setHours(hours, minutes, 0, 0);
+
+      // Parse the date string as a Toronto date (not UTC)
+      // date is in format "yyyy-MM-dd", we need to create a Date in Toronto timezone
+      const [year, month, day] = date.split('-').map(Number);
+
+      // Create the start date in Toronto timezone
+      const torontoStartDate = new Date(year, month - 1, day, hours, minutes, 0, 0);
+      // Convert from Toronto time to UTC for storage
+      const utcStartDate = fromZonedTime(torontoStartDate, TIMEZONE);
+
+      console.log('📅 Date calculation:', {
+        inputDate: date,
+        inputTime: startTime,
+        torontoStartDate: torontoStartDate.toString(),
+        utcStartDate: utcStartDate.toISOString(),
+      });
 
       const baseMissionData = {
         title: title.trim(),
@@ -97,14 +114,31 @@ export function NewMissionModal({ isOpen, onClose, onCreate, onCreateMultiple, b
         const missions: (typeof baseMissionData & { start_at: string })[] = [];
         const numDays = parseInt(numberOfDays) || 7;
 
+        console.log('🔄 Creating daily repeat missions:', { numDays, selectedDays });
+
         for (let i = 0; i < numDays; i++) {
-          const missionDate = addDays(startDate, i);
-          const dayKey = getDayOfWeekKey(missionDate);
+          // Add days in Toronto timezone to preserve the time of day
+          const torontoMissionDate = addDays(torontoStartDate, i);
+          const dayKey = getDayOfWeekKey(torontoMissionDate);
+
+          console.log(`📍 Day ${i}:`, {
+            torontoDate: torontoMissionDate.toString(),
+            dayOfWeek: dayKey,
+            isSelected: selectedDays[dayKey],
+          });
 
           if (selectedDays[dayKey]) {
+            // Convert from Toronto time to UTC for storage
+            const utcMissionDate = fromZonedTime(torontoMissionDate, TIMEZONE);
+
+            console.log(`✅ Adding mission for day ${i}:`, {
+              torontoDate: torontoMissionDate.toString(),
+              utcDate: utcMissionDate.toISOString(),
+            });
+
             missions.push({
               ...baseMissionData,
-              start_at: missionDate.toISOString(),
+              start_at: utcMissionDate.toISOString(),
             });
           }
         }
@@ -114,12 +148,13 @@ export function NewMissionModal({ isOpen, onClose, onCreate, onCreateMultiple, b
           return;
         }
 
+        console.log(`📋 Creating ${missions.length} missions`);
         await onCreateMultiple(missions);
         toast.success(`Created ${missions.length} missions`);
       } else {
         await onCreate({
           ...baseMissionData,
-          start_at: startDate.toISOString(),
+          start_at: utcStartDate.toISOString(),
         });
       }
 

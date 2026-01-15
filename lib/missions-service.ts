@@ -232,6 +232,17 @@ export async function uncompleteMission(missionId: string): Promise<Mission> {
 export async function deleteMission(missionId: string): Promise<void> {
   await cancelNotificationForMission(missionId);
 
+  // First, delete all calendar events linked to this mission (fixes ghost events bug)
+  const { error: calendarError } = await supabase
+    .from('calendar_events')
+    .delete()
+    .eq('mission_id', missionId);
+
+  if (calendarError) {
+    console.error('Error deleting calendar events for mission:', calendarError);
+    // Continue with mission deletion even if calendar cleanup fails
+  }
+
   const { error } = await supabase
     .from('missions')
     .delete()

@@ -34,7 +34,7 @@ import {
   selectMissionsForDay,
   type Mission,
 } from '@/lib/missions-service';
-import { syncMissionToCalendar, deleteMissionCalendarEvent } from '@/lib/mission-calendar-sync';
+import { syncMissionToCalendar, deleteMissionCalendarEvent, cleanupOrphanedCalendarEvents } from '@/lib/mission-calendar-sync';
 import { isPreviewMode } from '@/lib/preview-mode';
 import { mockMissions, mockBattlefronts } from '@/lib/mockData';
 
@@ -104,6 +104,13 @@ export default function MasterMissionsPage() {
     }
 
     try {
+      // Clean up orphaned calendar events in the background (non-blocking)
+      cleanupOrphanedCalendarEvents(user.id).then(count => {
+        if (count > 0) {
+          console.log(`🧹 Cleaned up ${count} orphaned calendar events`);
+        }
+      }).catch(err => console.error('Cleanup error:', err));
+
       const [missionsData, battlefrontsData] = await Promise.all([
         getMissions(user.id),
         supabase.from('battlefronts').select('id, name, color').eq('user_id', user.id),

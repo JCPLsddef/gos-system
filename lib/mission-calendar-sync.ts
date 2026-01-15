@@ -209,6 +209,61 @@ export async function createCalendarEventForMission(
   return event.id;
 }
 
+/**
+ * Clean up orphaned calendar events (events with mission_id that doesn't exist in missions table)
+ * Call this periodically or on page load to ensure data integrity
+ */
+export async function cleanupOrphanedCalendarEvents(userId: string): Promise<number> {
+  // Get all calendar events for this user that have a mission_id
+  const { data: calendarEvents, error: fetchError } = await supabase
+    .from('calendar_events')
+    .select('id, mission_id')
+    .eq('user_id', userId)
+    .not('mission_id', 'is', null);
+
+  if (fetchError || !calendarEvents || calendarEvents.length === 0) {
+    return 0;
+  }
+
+  // Get all mission IDs for this user
+  const { data: missions, error: missionsError } = await supabase
+    .from('missions')
+    .select('id')
+    .eq('user_id', userId);
+
+  if (missionsError) {
+    console.error('Error fetching missions for cleanup:', missionsError);
+    return 0;
+  }
+
+  const missionIds = new Set((missions || []).map(m => m.id));
+
+  // Find orphaned calendar events (mission_id doesn't exist in missions)
+  const orphanedEventIds = calendarEvents
+    .filter(event => event.mission_id && !missionIds.has(event.mission_id))
+    .map(event => event.id);
+
+  if (orphanedEventIds.length === 0) {
+    return 0;
+  }
+
+  console.log(`🧹 Found ${orphanedEventIds.length} orphaned calendar events, deleting...`);
+
+  // Delete orphaned events
+  const { error: deleteError } = await supabase
+    .from('calendar_events')
+    .delete()
+    .in('id', orphanedEventIds);
+
+  if (deleteError) {
+    console.error('Error deleting orphaned calendar events:', deleteError);
+    return 0;
+  }
+
+  console.log(`✅ Deleted ${orphanedEventIds.length} orphaned calendar events`);
+  return orphanedEventIds.length;
+}
+
 export async function syncRecurringMissionToCalendar(
   mission: MissionWithCalendar,
   recurrenceDays: number,
